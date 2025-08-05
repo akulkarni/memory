@@ -497,7 +497,15 @@ export class TigerMemoryRemoteServer {
           return;
         }
 
-        await transport.handlePostMessage(req, res);
+        try {
+          await transport.handlePostMessage(req, res);
+        } catch (error) {
+          logger.error('Error handling MCP message', error);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Internal server error' }));
+          }
+        }
         return;
       }
 

@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 
+// Add EventSource polyfill for Node.js
+const { EventSource } = require('eventsource');
+if (typeof global !== 'undefined' && !(global as any).EventSource) {
+  (global as any).EventSource = EventSource;
+}
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { 
@@ -26,6 +34,7 @@ const logger = createLogger({
 
 export class TigerMemoryRemoteClient {
   private server: Server;
+  private client: Client;
   private remoteUrl: string;
 
   constructor() {
@@ -43,24 +52,24 @@ export class TigerMemoryRemoteClient {
       }
     );
 
+    this.client = new Client(
+      {
+        name: 'tigermemory-remote-client',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {},
+      }
+    );
+
     this.setupHandlers();
   }
 
   private setupHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       try {
-        const response = await fetch(`${this.remoteUrl}/mcp/list_tools`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 })
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json() as any;
-        return result.result || { tools: [] };
+        const result = await this.client.listTools();
+        return result;
       } catch (error) {
         logger.error('Failed to list tools from remote server', error);
         throw new McpError(
@@ -72,31 +81,8 @@ export class TigerMemoryRemoteClient {
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
-        const response = await fetch(`${this.remoteUrl}/mcp/call_tool`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'tools/call',
-            params: request.params,
-            id: 1
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json() as any;
-        
-        if (result.error) {
-          throw new McpError(
-            result.error.code || ErrorCode.InternalError,
-            result.error.message || 'Remote tool execution failed'
-          );
-        }
-
-        return result.result;
+        const result = await this.client.callTool(request.params);
+        return result;
       } catch (error) {
         logger.error('Failed to call tool on remote server', { 
           tool: request.params.name, 
@@ -124,14 +110,21 @@ export class TigerMemoryRemoteClient {
       }
 
       const health = await healthResponse.json() as any;
-      logger.info('Connected to remote Tiger Memory server', { 
+      logger.info('Remote Tiger Memory server accessible', { 
         service: health.service,
         version: health.version,
         transport: health.transport
       });
 
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
+      // Connect to remote server using SSE transport
+      const sseTransport = new SSEClientTransport(new URL(`${this.remoteUrl}/mcp/sse`));
+      await this.client.connect(sseTransport);
+      
+      logger.info('Connected to remote server via SSE');
+
+      // Start local server for Claude Code
+      const serverTransport = new StdioServerTransport();
+      await this.server.connect(serverTransport);
       
       logger.info('Tiger Memory Remote Client started');
       

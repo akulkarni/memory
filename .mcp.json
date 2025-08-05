@@ -1,6 +1,13 @@
 {
   "mcpServers": {
     "tigermemory": {
+        "command": "npx",
+        "args": ["tigermemory", "remote-client"],
+        "env": {
+          "TIGER_REMOTE_URL": "https://tigermemory.onrender.com"
+        }
+    },
+    "tigermemory-local": {
       "type": "stdio",
       "command": "npx",
       "args": [
