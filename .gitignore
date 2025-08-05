@@ -10,3 +10,4 @@ logs/*.log
 .vscode/
 .idea/
 .claude_mcp_config.json
+*.backup

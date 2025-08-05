@@ -6,18 +6,6 @@
         "env": {
           "TIGER_REMOTE_URL": "https://tigermemory.onrender.com"
         }
-    },
-    "tigermemory-local": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "tigermemory",
-        "server"
-      ],
-      "env": {
-        "TIGER_CLOUD_CONNECTION_STRING": "postgres://tsdbadmin:ozdjxgfmx2wayeni@okyb46za0y.ax81rmf4w7.tsdb.dev.timescale.com:30137/tsdb?sslmode=require",
-        "ANTHROPIC_API_KEY": "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"
-      }
     }
   }
 }

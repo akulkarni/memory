@@ -22,6 +22,48 @@ const logger = createLogger({
   ]
 });
 
+// Migration status helpers
+async function checkMigrationStatus(database: TigerCloudDB, migrationId: string): Promise<{ applied: boolean; appliedAt?: string }> {
+  try {
+    // Create migrations table if it doesn't exist
+    await database['query'](`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    
+    // Check if this migration has been applied
+    const result = await database['query'](`
+      SELECT applied_at FROM migrations WHERE id = $1
+    `, [migrationId]);
+    
+    if (result.rows.length > 0) {
+      return { 
+        applied: true, 
+        appliedAt: result.rows[0].applied_at.toISOString().split('T')[0] 
+      };
+    }
+    
+    return { applied: false };
+  } catch (error) {
+    // If we can't check, assume not applied
+    return { applied: false };
+  }
+}
+
+async function recordMigrationSuccess(database: TigerCloudDB, migrationId: string): Promise<void> {
+  try {
+    await database['query'](`
+      INSERT INTO migrations (id, applied_at) 
+      VALUES ($1, NOW())
+      ON CONFLICT (id) DO UPDATE SET applied_at = NOW()
+    `, [migrationId]);
+  } catch (error) {
+    logger.warn('Failed to record migration status', error);
+  }
+}
+
 const program = new Command();
 
 program
@@ -54,48 +96,92 @@ program
         process.exit(1);
       }
 
-      // Try TimescaleDB version first, then fall back to simple version
-      console.log('📄 Attempting database migration...');
+      // Check if all migrations have already been applied
+      const migrations = [
+        { id: '001_initial_schema', file: '001_initial_schema.sql', fallback: '001_simple_schema.sql' },
+        { id: '002_fix_triggers', file: '002_fix_triggers.sql' }
+      ];
       
-      let migrationSuccess = false;
-      
-      // Try TimescaleDB version first
-      try {
-        const timescalePath = path.join(__dirname, 'migrations', '001_initial_schema.sql');
-        const timescaleSQL = fs.readFileSync(timescalePath, 'utf-8');
-        
-        console.log('   Trying TimescaleDB + pgvector schema...');
-        await database['query']('BEGIN');
-        await database['query'](timescaleSQL);
-        await database['query']('COMMIT');
-        console.log('✅ TimescaleDB migration completed successfully\n');
-        migrationSuccess = true;
-      } catch (timescaleError) {
-        await database['query']('ROLLBACK');
-        console.log('   TimescaleDB migration failed, trying simple schema...');
-        
-        // Try simple version
-        try {
-          const simplePath = path.join(__dirname, 'migrations', '001_simple_schema.sql');
-          const simpleSQL = fs.readFileSync(simplePath, 'utf-8');
-          
-          await database['query']('BEGIN');
-          await database['query'](simpleSQL);
-          await database['query']('COMMIT');
-          console.log('✅ Simple PostgreSQL migration completed successfully\n');
-          migrationSuccess = true;
-        } catch (simpleError) {
-          await database['query']('ROLLBACK');
-          console.error('❌ Both migrations failed:');
-          console.error('   TimescaleDB error:', timescaleError);
-          console.error('   Simple schema error:', simpleError);
-          process.exit(1);
+      let allApplied = true;
+      for (const migration of migrations) {
+        const applied = await checkMigrationStatus(database, migration.id);
+        if (!applied.applied) {
+          allApplied = false;
+          break;
         }
       }
       
-      if (!migrationSuccess) {
-        console.error('❌ Migration failed');
-        process.exit(1);
+      if (allApplied) {
+        console.log('✅ All database migrations already applied');
+        await database.disconnect();
+        return;
+      }
+
+      // Run migrations in sequence
+      console.log('📄 Running database migrations...');
+
+      for (const migration of migrations) {
+        const applied = await checkMigrationStatus(database, migration.id);
+        if (applied.applied) {
+          console.log(`✅ Migration ${migration.id} already applied (${applied.appliedAt})`);
+          continue;
+        }
+
+        console.log(`   Running migration: ${migration.id}`);
+        let migrationSuccess = false;
+
+        if (migration.id === '001_initial_schema') {
+          // Try TimescaleDB version first, then fall back to simple version
+          try {
+            const timescalePath = path.join(__dirname, 'migrations', migration.file);
+            const timescaleSQL = fs.readFileSync(timescalePath, 'utf-8');
+            
+            console.log('     Trying TimescaleDB + pgvector schema...');
+            await database['query']('BEGIN');
+            await database['query'](timescaleSQL);
+            await database['query']('COMMIT');
+            console.log('     ✅ TimescaleDB schema applied');
+            migrationSuccess = true;
+          } catch (timescaleError) {
+            await database['query']('ROLLBACK');
+            console.log('     TimescaleDB failed, trying simple schema...');
+            
+            try {
+              const simplePath = path.join(__dirname, 'migrations', migration.fallback!);
+              const simpleSQL = fs.readFileSync(simplePath, 'utf-8');
+              
+              await database['query']('BEGIN');
+              await database['query'](simpleSQL);
+              await database['query']('COMMIT');
+              console.log('     ✅ Simple PostgreSQL schema applied');
+              migrationSuccess = true;
+            } catch (simpleError) {
+              await database['query']('ROLLBACK');
+              console.error(`❌ Migration ${migration.id} failed:`, simpleError);
+              process.exit(1);
+            }
+          }
+        } else {
+          // Regular migration
+          try {
+            const migrationPath = path.join(__dirname, 'migrations', migration.file);
+            const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
+            
+            await database['query']('BEGIN');
+            await database['query'](migrationSQL);
+            await database['query']('COMMIT');
+            console.log(`     ✅ Migration ${migration.id} applied`);
+            migrationSuccess = true;
+          } catch (error) {
+            await database['query']('ROLLBACK');
+            console.error(`❌ Migration ${migration.id} failed:`, error);
+            process.exit(1);
+          }
+        }
+
+        if (migrationSuccess) {
+          await recordMigrationSuccess(database, migration.id);
+        }
       }
 
       await database.disconnect();
