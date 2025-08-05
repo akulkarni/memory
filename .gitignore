@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.log
+logs/*.log
+.env
+.env.local
+.DS_Store
+*.tsbuildinfo
+.vscode/
+.idea/
+.claude_mcp_config.json
