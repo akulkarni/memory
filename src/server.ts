@@ -277,10 +277,46 @@ export class TigerMemoryServer {
   }
 }
 
+// Web server for Render deployment
+export class TigerMemoryWebServer {
+  private port: number;
+
+  constructor() {
+    this.port = parseInt(process.env['PORT'] || '10000');
+  }
+
+  async start(): Promise<void> {
+    const http = require('http');
+    
+    const server = http.createServer((_req: any, res: any) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        service: 'Tiger Memory',
+        version: '1.0.0',
+        status: 'running',
+        mcp_tools: ['remember_decision', 'recall_context', 'discover_patterns', 'get_timeline']
+      }));
+    });
+
+    server.listen(this.port, () => {
+      console.log(`Tiger Memory web server running on port ${this.port}`);
+    });
+  }
+}
+
 if (require.main === module) {
-  const server = new TigerMemoryServer();
-  server.start().catch((error) => {
-    console.error('Server startup failed:', error);
-    process.exit(1);
-  });
+  // Check if we're running in web mode (PORT env var set) or MCP mode
+  if (process.env['PORT']) {
+    const webServer = new TigerMemoryWebServer();
+    webServer.start().catch((error) => {
+      console.error('Web server startup failed:', error);
+      process.exit(1);
+    });
+  } else {
+    const server = new TigerMemoryServer();
+    server.start().catch((error) => {
+      console.error('MCP server startup failed:', error);
+      process.exit(1);
+    });
+  }
 }
