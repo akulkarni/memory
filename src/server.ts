@@ -482,7 +482,7 @@ export class TigerMemoryRemoteServer {
         };
 
         await this.server.connect(transport);
-        await transport.start();
+        // Note: server.connect() automatically calls transport.start()
         return;
       }
 
