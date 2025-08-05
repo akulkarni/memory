@@ -2,6 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
@@ -277,45 +278,266 @@ export class TigerMemoryServer {
   }
 }
 
-// Web server for Render deployment
-export class TigerMemoryWebServer {
+// Remote MCP server for Render deployment using SSE transport
+export class TigerMemoryRemoteServer {
   private port: number;
+  private server: Server;
+  private database: TigerCloudDB;
+  private toolHandler: ToolHandler;
+  private httpServer: any;
+  private transports: Map<string, SSEServerTransport> = new Map();
 
   constructor() {
     this.port = parseInt(process.env['PORT'] || '10000');
+    this.server = new Server(
+      {
+        name: 'tigermemory-remote',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+
+    this.database = new TigerCloudDB();
+    this.toolHandler = new ToolHandler(this.database);
+    this.setupMCPHandlers();
+    this.setupHTTPServer();
+  }
+
+  private setupMCPHandlers(): void {
+    // Same MCP handlers as the local server
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          {
+            name: 'remember_decision',
+            description: 'Store an architectural decision with context and reasoning',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                decision: { type: 'string', description: 'The architectural decision made' },
+                reasoning: { type: 'string', description: 'The reasoning behind the decision' },
+                type: {
+                  type: 'string',
+                  enum: ['tech_stack', 'architecture', 'pattern', 'tool_choice'],
+                  description: 'The type of decision'
+                },
+                alternatives_considered: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Alternative options that were considered'
+                },
+                files_affected: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Files that were affected by this decision'
+                },
+                confidence: {
+                  type: 'number',
+                  minimum: 0,
+                  maximum: 1,
+                  description: 'Confidence level in the decision (0-1)'
+                },
+                public: {
+                  type: 'boolean',
+                  description: 'Whether this decision can be shared publicly for pattern learning'
+                }
+              },
+              required: ['decision', 'reasoning', 'type', 'confidence', 'public']
+            }
+          },
+          {
+            name: 'recall_context',
+            description: 'Retrieve project context and previous decisions',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string', description: 'Optional semantic search query' },
+                limit: { type: 'number', default: 10, description: 'Maximum number of decisions to retrieve' }
+              }
+            }
+          },
+          {
+            name: 'discover_patterns',
+            description: 'Search for architectural patterns from similar projects',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string', description: 'Search query for architectural patterns' },
+                tech_stack: { type: 'array', items: { type: 'string' }, description: 'Filter by technology stack' },
+                project_type: { type: 'string', description: 'Filter by project type' }
+              },
+              required: ['query']
+            }
+          },
+          {
+            name: 'get_timeline',
+            description: 'Get chronological timeline of project decisions',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                since: { type: 'string', format: 'date-time', description: 'Get decisions since this date' },
+                category: {
+                  type: 'string',
+                  enum: ['tech_stack', 'architecture', 'pattern', 'tool_choice'],
+                  description: 'Filter by decision category'
+                }
+              }
+            }
+          }
+        ]
+      };
+    });
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        await this.ensureProjectContext();
+
+        // Use a default project/session for remote server
+        // In production, you'd want better session management
+        const projectInfo = { name: 'remote-project', pathHash: 'remote-hash' };
+        let project = await this.database.getProject(projectInfo.pathHash);
+        if (!project) {
+          project = await this.database.createProject({
+            name: projectInfo.name,
+            path_hash: projectInfo.pathHash,
+            tech_stack: ['remote'],
+            project_type: 'remote'
+          });
+        }
+
+        const session = await this.database.createSession(project.id!);
+
+        switch (name) {
+          case 'remember_decision':
+            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!);
+          case 'recall_context':
+            return await this.toolHandler.handleRecallContext(args, project.id!);
+          case 'discover_patterns':
+            return await this.toolHandler.handleDiscoverPatterns(args);
+          case 'get_timeline':
+            return await this.toolHandler.handleGetTimeline(args, project.id!);
+          default:
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+        }
+      } catch (error) {
+        logger.error('Tool execution error', { name, error });
+        if (error instanceof McpError) throw error;
+        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+  }
+
+  private async ensureProjectContext(): Promise<void> {
+    // Simplified for remote server - you might want more sophisticated project detection
+  }
+
+  private setupHTTPServer(): void {
+    const http = require('http');
+    const url = require('url');
+
+    this.httpServer = http.createServer(async (req: any, res: any) => {
+      const parsedUrl = url.parse(req.url, true);
+      
+      // CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+
+      if (req.method === 'GET' && parsedUrl.pathname === '/') {
+        // Health check endpoint
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          service: 'Tiger Memory Remote MCP Server',
+          version: '1.0.0',
+          status: 'running',
+          transport: 'sse',
+          mcp_tools: ['remember_decision', 'recall_context', 'discover_patterns', 'get_timeline'],
+          endpoints: {
+            connect: '/mcp/sse',
+            message: '/mcp/message'
+          }
+        }));
+        return;
+      }
+
+      if (req.method === 'GET' && parsedUrl.pathname === '/mcp/sse') {
+        // SSE connection endpoint
+        const transport = new SSEServerTransport('/mcp/message', res);
+        this.transports.set(transport.sessionId, transport);
+        
+        transport.onclose = () => {
+          this.transports.delete(transport.sessionId);
+        };
+
+        await this.server.connect(transport);
+        await transport.start();
+        return;
+      }
+
+      if (req.method === 'POST' && parsedUrl.pathname === '/mcp/message') {
+        // Handle POST messages from clients
+        const sessionId = parsedUrl.query.sessionId as string;
+        const transport = this.transports.get(sessionId);
+        
+        if (!transport) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Session not found' }));
+          return;
+        }
+
+        await transport.handlePostMessage(req, res);
+        return;
+      }
+
+      // 404 for other routes
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
   }
 
   async start(): Promise<void> {
-    const http = require('http');
-    
-    const server = http.createServer((_req: any, res: any) => {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        service: 'Tiger Memory',
-        version: '1.0.0',
-        status: 'running',
-        mcp_tools: ['remember_decision', 'recall_context', 'discover_patterns', 'get_timeline']
-      }));
-    });
-
-    server.listen(this.port, () => {
-      console.log(`Tiger Memory web server running on port ${this.port}`);
-    });
+    try {
+      await this.database.connect();
+      
+      this.httpServer.listen(this.port, () => {
+        logger.info(`Tiger Memory Remote MCP Server running on port ${this.port}`);
+        console.log(`🐅 Tiger Memory Remote MCP Server`);
+        console.log(`🌐 Health Check: http://localhost:${this.port}/`);
+        console.log(`📡 MCP SSE Endpoint: http://localhost:${this.port}/mcp/sse`);
+        console.log(`📬 MCP Message Endpoint: http://localhost:${this.port}/mcp/message`);
+      });
+      
+    } catch (error) {
+      logger.error('Failed to start remote server', error);
+      process.exit(1);
+    }
   }
 }
 
 if (require.main === module) {
-  // Check if we're running in web mode (PORT env var set) or MCP mode
+  // Check if we're running in remote mode (PORT env var set) or local MCP mode
   if (process.env['PORT']) {
-    const webServer = new TigerMemoryWebServer();
-    webServer.start().catch((error) => {
-      console.error('Web server startup failed:', error);
+    const remoteServer = new TigerMemoryRemoteServer();
+    remoteServer.start().catch((error) => {
+      console.error('Remote MCP server startup failed:', error);
       process.exit(1);
     });
   } else {
     const server = new TigerMemoryServer();
     server.start().catch((error) => {
-      console.error('MCP server startup failed:', error);
+      console.error('Local MCP server startup failed:', error);
       process.exit(1);
     });
   }

@@ -236,6 +236,22 @@ program
   });
 
 program
+  .command('remote-client')
+  .description('Start the Tiger Memory remote client (connects to remote MCP server)')
+  .option('-u, --url <url>', 'Remote server URL', 'https://tigermemory.onrender.com')
+  .action(async (options) => {
+    try {
+      process.env['TIGER_REMOTE_URL'] = options.url;
+      const { TigerMemoryRemoteClient } = await import('./remote-client.js');
+      const client = new TigerMemoryRemoteClient();
+      await client.start();
+    } catch (error) {
+      logger.error('Failed to start remote client:', error);
+      process.exit(1);
+    }
+  });
+
+program
   .command('status')
   .description('Check Tiger Memory status for the current project')
   .action(async () => {
