@@ -64,7 +64,7 @@ export class TigerCloudDB {
       connectionTimeoutMillis: 10000,
     });
 
-    this.pool.on('error', (err) => {
+    this.pool.on('error', (err: Error) => {
       logError(err, { context: 'database_pool_idle_client' });
     });
   }
