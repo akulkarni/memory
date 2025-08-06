@@ -342,6 +342,12 @@ export class TigerMemoryRemoteServer {
       try {
         // Set current user context for tool handlers
         this.currentUserId = session.userId;
+        logger.info('MCP message processing', { 
+          sessionId, 
+          userId: session.userId, 
+          username: session.username,
+          currentUserId: this.currentUserId 
+        });
         
         await transport.handlePostMessage(req, res);
         
@@ -464,6 +470,12 @@ export class TigerMemoryRemoteServer {
 
         switch (name) {
           case 'remember_decision':
+            logger.info('Calling handleRememberDecision', { 
+              toolName: name,
+              projectId: project.id,
+              sessionId: session.id,
+              currentUserId: this.currentUserId 
+            });
             return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!, this.currentUserId);
           case 'recall_context':
             return await this.toolHandler.handleRecallContext(args, project.id!);
