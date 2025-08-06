@@ -311,9 +311,41 @@ export class TigerMemoryRemoteServer {
     this.toolHandler = new ToolHandler(this.database);
     this.auth = createAuthModule(this.database);
     this.app = express();
+    
+    // CRITICAL: Set up MCP message endpoint FIRST, before any middleware that might consume the stream
+    this.setupMCPMessageEndpoint();
     this.setupExpress();
     this.setupMCPHandlers();
     this.setupHTTPServer();
+  }
+
+  private setupMCPMessageEndpoint(): void {
+    // MCP message endpoint - NO middleware, raw stream access for SSEServerTransport
+    this.app.post('/mcp/message', async (req: express.Request, res: express.Response) => {
+      const sessionId = req.query['sessionId'] as string;
+      
+      // Check session-based authentication (from SSE connection)
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        res.status(401).json({ error: 'Invalid session - please reconnect' });
+        return;
+      }
+      
+      const transport = this.transports.get(sessionId);
+      if (!transport) {
+        res.status(404).json({ error: 'Transport not found' });
+        return;
+      }
+
+      try {
+        await transport.handlePostMessage(req, res);
+      } catch (error) {
+        logger.error('Error handling MCP message', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+      }
+    });
   }
 
   private setupMCPHandlers(): void {
@@ -511,32 +543,6 @@ export class TigerMemoryRemoteServer {
       await this.server.connect(transport);
     });
     
-    // MCP message endpoint  
-    this.app.post('/mcp/message', async (req: express.Request, res: express.Response) => {
-      const sessionId = req.query['sessionId'] as string;
-      
-      // Check session-based authentication (from SSE connection)
-      const session = this.sessions.get(sessionId);
-      if (!session) {
-        return res.status(401).json({ error: 'Invalid session - please reconnect' });
-      }
-      
-      const transport = this.transports.get(sessionId);
-      if (!transport) {
-        return res.status(404).json({ error: 'Transport not found' });
-      }
-
-      try {
-        await transport.handlePostMessage(req, res);
-        return;
-      } catch (error) {
-        logger.error('Error handling MCP message', error);
-        if (!res.headersSent) {
-          return res.status(500).json({ error: 'Internal server error' });
-        }
-        return;
-      }
-    });
     
     // Health check
     this.app.get('/', (_req: express.Request, res: express.Response) => {
