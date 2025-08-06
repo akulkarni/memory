@@ -467,8 +467,8 @@ export class TigerMemoryRemoteServer {
     // Auth middleware for API routes
     this.app.use('/api', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
     
-    // Auth middleware for MCP routes
-    this.app.use('/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
+    // Auth middleware for MCP SSE endpoint only (message endpoint uses session-based auth)
+    this.app.use('/mcp/sse', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
     
     // Auth routes
     this.app.use('/auth', this.auth.routes);
