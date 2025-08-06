@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { ProjectDetector } from './project-detector.js';
-import { TigerCloudDB } from './database.js';
+import { ProjectDetector } from './project-detector';
+import { TigerCloudDB } from './database';
+import { AuthManager } from './cli/auth';
 import * as path from 'path';
 import * as fs from 'fs';
 import { createLogger } from 'winston';
@@ -326,6 +327,10 @@ program
   .description('Start the Tiger Memory remote client (connects to remote MCP server)')
   .option('-u, --url <url>', 'Remote server URL', 'https://tigermemory.onrender.com')
   .action(async (options) => {
+    if (!auth.isLoggedIn()) {
+      console.error('❌ Not logged in. Run `tigermemory login` first.');
+      process.exit(1);
+    }
     try {
       process.env['TIGER_REMOTE_URL'] = options.url;
       const { TigerMemoryRemoteClient } = await import('./remote-client.js');
@@ -425,6 +430,109 @@ program
       
     } catch (error) {
       console.error('❌ Reset failed:', error);
+    }
+  });
+
+// Auth commands
+const auth = new AuthManager();
+
+program
+  .command('login')
+  .description('Login to Tiger Memory with GitHub OAuth')
+  .option('--local', 'Login to local development server')
+  .option('--url <url>', 'Custom server URL')
+  .action(async (options) => {
+    try {
+      await auth.login({ 
+        local: options.local, 
+        baseUrl: options.url 
+      });
+    } catch (error) {
+      console.error('❌ Login failed:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program
+  .command('logout')
+  .description('Logout from Tiger Memory')
+  .action(async () => {
+    try {
+      if (!auth.isLoggedIn()) {
+        console.log('ℹ️  You are not currently logged in.');
+        return;
+      }
+      
+      auth.logout();
+      console.log('✅ Successfully logged out from Tiger Memory');
+    } catch (error) {
+      console.error('❌ Logout failed:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program
+  .command('whoami')
+  .description('Show current Tiger Memory user')
+  .action(async () => {
+    try {
+      if (!auth.isLoggedIn()) {
+        console.log('❌ Not logged in. Run `tigermemory login` to authenticate.');
+        return;
+      }
+      
+      const user = auth.getUser();
+      const apiKey = auth.getApiKey();
+      
+      console.log('🐅 Tiger Memory Authentication Status\n');
+      console.log(`✅ Logged in as: @${user?.username || 'unknown'}`);
+      if (user?.email) {
+        console.log(`📧 Email: ${user.email}`);
+      }
+      console.log(`🔑 API Key: ${apiKey?.substring(0, 12)}...`);
+    } catch (error) {
+      console.error('❌ Failed to get user info:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+// MCP client test command
+program
+  .command('test-connection')
+  .description('Test connection to Tiger Memory service')
+  .option('--local', 'Test local server connection')
+  .option('--url <url>', 'Custom server URL')
+  .action(async (options) => {
+    try {
+      if (!options.local && !auth.isLoggedIn()) {
+        console.error('❌ Not logged in. Run `tigermemory login` first.');
+        process.exit(1);
+      }
+
+      console.log('🤖 Testing Tiger Memory connection...');
+      
+      const { TigerMemoryMCPClient } = await import('./mcp-client');
+      const client = new TigerMemoryMCPClient({
+        serverUrl: options.url,
+        useLocal: options.local
+      });
+      
+      await client.connect();
+      
+      // Test listing tools
+      const tools = await client.listTools();
+      console.log(`✅ Connected successfully!`);
+      console.log(`🔧 Available tools: ${tools.tools.map(t => t.name).join(', ')}`);
+      
+      if (client.isAuthenticated()) {
+        const user = client.getUserInfo();
+        console.log(`👤 Authenticated as: @${user?.username || 'unknown'}`);
+      }
+      
+      await client.disconnect();
+    } catch (error) {
+      console.error('❌ Connection test failed:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
     }
   });
 

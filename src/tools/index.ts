@@ -1,5 +1,5 @@
-import { TigerCloudDB, Decision } from '../database.js';
-import { ArchitecturalIntelligence } from '../intelligence.js';
+import { TigerCloudDB, Decision } from '../database';
+import { ArchitecturalIntelligence } from '../intelligence';
 import { createLogger } from 'winston';
 
 const logger = createLogger({

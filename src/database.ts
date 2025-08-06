@@ -1,10 +1,11 @@
 import { Pool, QueryResult } from 'pg';
-import { logger, TigerMemoryError, errorCodes, logError } from './logger.js';
+import { logger, TigerMemoryError, errorCodes, logError } from './logger';
 
 export interface Decision {
   id?: string;
   project_id: string;
   session_id: string;
+  user_id?: string;
   decision: string;
   reasoning: string;
   type: 'tech_stack' | 'architecture' | 'pattern' | 'tool_choice';
@@ -38,9 +39,29 @@ export interface Project {
 export interface Session {
   id?: string;
   project_id: string;
+  user_id?: string;
   started_at?: Date;
   ended_at?: Date;
   decision_count: number;
+}
+
+export interface User {
+  id?: string;
+  github_id: number;
+  email: string;
+  username: string;
+  name: string | null;
+  avatar_url: string;
+  created_at?: Date;
+}
+
+export interface ApiKey {
+  id?: string;
+  user_id: string;
+  key_hash: string;
+  name: string;
+  last_used_at?: Date;
+  created_at?: Date;
 }
 
 export class TigerCloudDB {
@@ -144,13 +165,13 @@ export class TigerCloudDB {
     return result.rows[0] || null;
   }
 
-  async createSession(projectId: string): Promise<Session> {
+  async createSession(projectId: string, userId?: string): Promise<Session> {
     const query = `
-      INSERT INTO sessions (project_id, started_at, decision_count)
-      VALUES ($1, NOW(), 0)
+      INSERT INTO sessions (project_id, user_id, started_at, decision_count)
+      VALUES ($1, $2, NOW(), 0)
       RETURNING *
     `;
-    const result = await this.query<Session>(query, [projectId]);
+    const result = await this.query<Session>(query, [projectId, userId || null]);
     return result.rows[0]!;
   }
 
@@ -162,16 +183,17 @@ export class TigerCloudDB {
   async saveDecision(decision: Decision): Promise<Decision> {
     const query = `
       INSERT INTO decisions (
-        project_id, session_id, decision, reasoning, type, 
+        project_id, session_id, user_id, decision, reasoning, type, 
         alternatives_considered, files_affected, confidence, public, 
         vector_embedding, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
       RETURNING *
     `;
     const values = [
       decision.project_id,
       decision.session_id,
+      decision.user_id || null,
       decision.decision,
       decision.reasoning,
       decision.type,
@@ -297,5 +319,85 @@ export class TigerCloudDB {
     } catch {
       return false;
     }
+  }
+
+  // User management methods
+  async createUser(userData: Omit<User, 'id' | 'created_at'>): Promise<User> {
+    const query = `
+      INSERT INTO users (github_id, email, username, name, avatar_url, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING *
+    `;
+    const values = [userData.github_id, userData.email, userData.username, userData.name, userData.avatar_url];
+    const result = await this.query<User>(query, values);
+    return result.rows[0]!;
+  }
+
+  async getUserById(userId: string): Promise<User | null> {
+    const query = 'SELECT * FROM users WHERE id = $1';
+    const result = await this.query<User>(query, [userId]);
+    return result.rows[0] || null;
+  }
+
+  async getUserByGitHubId(githubId: number): Promise<User | null> {
+    const query = 'SELECT * FROM users WHERE github_id = $1';
+    const result = await this.query<User>(query, [githubId]);
+    return result.rows[0] || null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const query = 'SELECT * FROM users WHERE email = $1';
+    const result = await this.query<User>(query, [email]);
+    return result.rows[0] || null;
+  }
+
+  async updateUser(userId: string, updates: Partial<Omit<User, 'id' | 'github_id' | 'created_at'>>): Promise<User> {
+    const fields = Object.keys(updates).filter(key => updates[key as keyof typeof updates] !== undefined);
+    const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+    const values = [userId, ...fields.map(field => updates[field as keyof typeof updates])];
+
+    const query = `
+      UPDATE users 
+      SET ${setClause}, updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    const result = await this.query<User>(query, values);
+    return result.rows[0]!;
+  }
+
+  // API Key management methods
+  async createApiKey(apiKeyData: Omit<ApiKey, 'id' | 'created_at' | 'last_used_at'>): Promise<ApiKey> {
+    const query = `
+      INSERT INTO api_keys (user_id, key_hash, name, created_at)
+      VALUES ($1, $2, $3, NOW())
+      RETURNING *
+    `;
+    const values = [apiKeyData.user_id, apiKeyData.key_hash, apiKeyData.name];
+    const result = await this.query<ApiKey>(query, values);
+    return result.rows[0]!;
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKey | null> {
+    const query = 'SELECT * FROM api_keys WHERE key_hash = $1';
+    const result = await this.query<ApiKey>(query, [keyHash]);
+    return result.rows[0] || null;
+  }
+
+  async updateApiKeyLastUsed(apiKeyId: string): Promise<void> {
+    const query = 'UPDATE api_keys SET last_used_at = NOW() WHERE id = $1';
+    await this.query(query, [apiKeyId]);
+  }
+
+  async getUserApiKeys(userId: string): Promise<ApiKey[]> {
+    const query = 'SELECT * FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC';
+    const result = await this.query<ApiKey>(query, [userId]);
+    return result.rows;
+  }
+
+  async deleteApiKey(apiKeyId: string, userId: string): Promise<boolean> {
+    const query = 'DELETE FROM api_keys WHERE id = $1 AND user_id = $2';
+    const result = await this.query(query, [apiKeyId, userId]);
+    return result.rowCount! > 0;
   }
 }

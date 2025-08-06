@@ -9,11 +9,14 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { TigerCloudDB } from './database.js';
-import { ProjectDetector } from './project-detector.js';
-import { ToolHandler } from './tools/index.js';
+import { TigerCloudDB } from './database';
+import { ProjectDetector } from './project-detector';
+import { ToolHandler } from './tools/index';
+import { createAuthModule, AuthModule } from './auth/index';
 import { createLogger } from 'winston';
 import * as dotenv from 'dotenv';
+import express from 'express';
+import cookieParser from 'cookie-parser';
 
 dotenv.config();
 
@@ -284,6 +287,8 @@ export class TigerMemoryRemoteServer {
   private server: Server;
   private database: TigerCloudDB;
   private toolHandler: ToolHandler;
+  private auth: AuthModule;
+  private app: express.Application;
   private httpServer: any;
   private transports: Map<string, SSEServerTransport> = new Map();
 
@@ -303,6 +308,9 @@ export class TigerMemoryRemoteServer {
 
     this.database = new TigerCloudDB();
     this.toolHandler = new ToolHandler(this.database);
+    this.auth = createAuthModule(this.database);
+    this.app = express();
+    this.setupExpress();
     this.setupMCPHandlers();
     this.setupHTTPServer();
   }
@@ -437,82 +445,83 @@ export class TigerMemoryRemoteServer {
     // Simplified for remote server - you might want more sophisticated project detection
   }
 
-  private setupHTTPServer(): void {
-    const http = require('http');
-    const url = require('url');
-
-    this.httpServer = http.createServer(async (req: any, res: any) => {
-      const parsedUrl = url.parse(req.url, true);
-      
-      // CORS headers
+  private setupExpress(): void {
+    // Middleware
+    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true }));
+    this.app.use(cookieParser());
+    
+    // CORS
+    this.app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
+        res.sendStatus(200);
         return;
       }
-
-      if (req.method === 'GET' && parsedUrl.pathname === '/') {
-        // Health check endpoint
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          service: 'Tiger Memory Remote MCP Server',
-          version: '1.0.0',
-          status: 'running',
-          transport: 'sse',
-          mcp_tools: ['remember_decision', 'recall_context', 'discover_patterns', 'get_timeline'],
-          endpoints: {
-            connect: '/mcp/sse',
-            message: '/mcp/message'
-          }
-        }));
-        return;
-      }
-
-      if (req.method === 'GET' && parsedUrl.pathname === '/mcp/sse') {
-        // SSE connection endpoint
-        const transport = new SSEServerTransport('/mcp/message', res);
-        this.transports.set(transport.sessionId, transport);
-        
-        transport.onclose = () => {
-          this.transports.delete(transport.sessionId);
-        };
-
-        await this.server.connect(transport);
-        // Note: server.connect() automatically calls transport.start()
-        return;
-      }
-
-      if (req.method === 'POST' && parsedUrl.pathname === '/mcp/message') {
-        // Handle POST messages from clients
-        const sessionId = parsedUrl.query.sessionId as string;
-        const transport = this.transports.get(sessionId);
-        
-        if (!transport) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Session not found' }));
-          return;
-        }
-
-        try {
-          await transport.handlePostMessage(req, res);
-        } catch (error) {
-          logger.error('Error handling MCP message', error);
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Internal server error' }));
-          }
-        }
-        return;
-      }
-
-      // 404 for other routes
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
+      next();
     });
+    
+    // Auth middleware for API routes
+    this.app.use('/api', (req: any, res: any, next: any) => this.auth.middleware.extractUser(req, res, next));
+    
+    // Auth routes
+    this.app.use('/auth', this.auth.routes);
+    
+    // MCP SSE endpoint
+    this.app.get('/mcp/sse', async (_req, res) => {
+      const transport = new SSEServerTransport('/mcp/message', res);
+      this.transports.set(transport.sessionId, transport);
+      
+      transport.onclose = () => {
+        this.transports.delete(transport.sessionId);
+      };
+
+      await this.server.connect(transport);
+    });
+    
+    // MCP message endpoint
+    this.app.post('/mcp/message', async (req, res) => {
+      const sessionId = req.query['sessionId'] as string;
+      const transport = this.transports.get(sessionId);
+      
+      if (!transport) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+
+      try {
+        await transport.handlePostMessage(req, res);
+        return;
+      } catch (error) {
+        logger.error('Error handling MCP message', error);
+        if (!res.headersSent) {
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+        return;
+      }
+    });
+    
+    // Health check
+    this.app.get('/', (_req, res) => {
+      res.json({
+        service: 'Tiger Memory Remote MCP Server',
+        version: '1.0.0',
+        status: 'running',
+        transport: 'sse',
+        mcp_tools: ['remember_decision', 'recall_context', 'discover_patterns', 'get_timeline'],
+        endpoints: {
+          connect: '/mcp/sse',
+          message: '/mcp/message',
+          auth: '/auth/github'
+        }
+      });
+    });
+  }
+
+  private setupHTTPServer(): void {
+    const http = require('http');
+    this.httpServer = http.createServer(this.app);
   }
 
   async start(): Promise<void> {
