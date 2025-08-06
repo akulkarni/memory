@@ -86,18 +86,21 @@ export class AuthManager {
       ? 'http://localhost:3000' 
       : (options.baseUrl || 'https://tigermemory.onrender.com');
 
-    // Start temporary local server to capture callback
-    const callbackPort = await this.findAvailablePort(8080);
-    const loginUrl = `${baseUrl}/auth/github?callback_port=${callbackPort}`;
-
     console.log('🔐 Starting Tiger Memory authentication...');
-    console.log(`Opening browser to: ${loginUrl}`);
     
-    // Open browser
-    this.openBrowser(loginUrl);
+    // Start device flow
+    console.log('📱 Requesting device authorization...');
+    const deviceResponse = await this.startDeviceFlow(baseUrl);
     
-    // Wait for callback with API key
-    const result = await this.waitForCallback(callbackPort);
+    console.log(`\n🌐 Please visit: ${deviceResponse.verification_uri}`);
+    console.log(`🔢 Enter this code: ${deviceResponse.user_code}`);
+    console.log('\n⏳ Waiting for you to complete authentication...\n');
+    
+    // Open browser automatically
+    this.openBrowser(deviceResponse.verification_uri);
+    
+    // Poll for completion
+    const result = await this.pollForToken(baseUrl, deviceResponse.device_code);
     
     if (result.success && result.apiKey) {
       // Save auth config
@@ -150,90 +153,86 @@ export class AuthManager {
     spawn(command, [url], { detached: true, stdio: 'ignore' });
   }
 
-  private async waitForCallback(port: number): Promise<{
+  private async startDeviceFlow(baseUrl: string): Promise<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+  }> {
+    const response = await fetch(`${baseUrl}/auth/device`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Device flow failed: ${response.statusText}`);
+    }
+
+    return await response.json() as {
+      device_code: string;
+      user_code: string;
+      verification_uri: string;
+      expires_in: number;
+      interval: number;
+    };
+  }
+
+  private async pollForToken(baseUrl: string, deviceCode: string): Promise<{
     success: boolean;
     apiKey?: string;
     username?: string;
-    email?: string | undefined;
+    email?: string;
     error?: string;
   }> {
-    return new Promise((resolve, reject) => {
-      const server = http.createServer((req, res) => {
-        const url = new URL(req.url!, `http://localhost:${port}`);
-        
-        if (url.pathname === '/callback') {
-          const apiKey = url.searchParams.get('apiKey');
-          const username = url.searchParams.get('username');
-          const email = url.searchParams.get('email') || undefined;
-          const error = url.searchParams.get('error');
-          
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body>
-                  <h1>❌ Authentication Failed</h1>
-                  <p>Error: ${error}</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            server.close();
-            resolve({ success: false, error });
-          } else if (apiKey && username) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body>
-                  <h1>✅ Successfully Authenticated!</h1>
-                  <p>Welcome, @${username}!</p>
-                  <p>You can now close this window and return to your terminal.</p>
-                  <script>
-                    setTimeout(() => window.close(), 3000);
-                  </script>
-                </body>
-              </html>
-            `);
-            server.close();
-            resolve({ 
-              success: true, 
-              apiKey, 
-              username, 
-              email 
-            });
-          } else {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body>
-                  <h1>❌ Invalid Response</h1>
-                  <p>Missing required authentication data.</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            server.close();
-            resolve({ success: false, error: 'Missing authentication data' });
-          }
+    const maxAttempts = 60; // 5 minutes with 5-second intervals
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      try {
+        const response = await fetch(`${baseUrl}/auth/device/token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ device_code: deviceCode }),
+        });
+
+        const data = await response.json() as any;
+
+        if (response.ok && data.apiKey) {
+          return {
+            success: true,
+            apiKey: data.apiKey,
+            username: data.username,
+            email: data.email,
+          };
+        } else if (data.error === 'authorization_pending') {
+          // Still waiting for user to authorize
+          process.stdout.write('.');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          attempts++;
+          continue;
         } else {
-          res.writeHead(404);
-          res.end('Not found');
+          return {
+            success: false,
+            error: data.error || 'Unknown error',
+          };
         }
-      });
+      } catch (error) {
+        return {
+          success: false,
+          error: `Network error: ${error instanceof Error ? error.message : 'Unknown'}`,
+        };
+      }
+    }
 
-      server.listen(port, () => {
-        console.log(`Waiting for authentication callback on port ${port}...`);
-      });
-
-      server.on('error', (err) => {
-        reject(new Error(`Failed to start callback server: ${err.message}`));
-      });
-
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        server.close();
-        reject(new Error('Authentication timeout - please try again'));
-      }, 5 * 60 * 1000);
-    });
+    return {
+      success: false,
+      error: 'Authentication timeout - please try again',
+    };
   }
+
 }
