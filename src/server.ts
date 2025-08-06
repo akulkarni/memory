@@ -291,6 +291,7 @@ export class TigerMemoryRemoteServer {
   private app: express.Application;
   private httpServer: any;
   private transports: Map<string, SSEServerTransport> = new Map();
+  private sessions: Map<string, { userId: string; username: string }> = new Map();
 
   constructor() {
     this.port = parseInt(process.env['PORT'] || '10000');
@@ -487,8 +488,15 @@ export class TigerMemoryRemoteServer {
       const transport = new SSEServerTransport('/mcp/message', res);
       this.transports.set(transport.sessionId, transport);
       
+      // Store user session for message endpoint authentication
+      this.sessions.set(transport.sessionId, {
+        userId: user.id,
+        username: user.username
+      });
+      
       transport.onclose = () => {
         this.transports.delete(transport.sessionId);
+        this.sessions.delete(transport.sessionId);
         logger.info('MCP SSE connection closed', { sessionId: transport.sessionId });
       };
 
@@ -497,17 +505,17 @@ export class TigerMemoryRemoteServer {
     
     // MCP message endpoint  
     this.app.post('/mcp/message', async (req: express.Request, res: express.Response) => {
-      // Auth middleware should have already run
-      const user = (req as any).user;
-      if (!user) {
-        return res.status(401).json({ error: 'Authentication required' });
+      const sessionId = req.query['sessionId'] as string;
+      
+      // Check session-based authentication (from SSE connection)
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        return res.status(401).json({ error: 'Invalid session - please reconnect' });
       }
       
-      const sessionId = req.query['sessionId'] as string;
       const transport = this.transports.get(sessionId);
-      
       if (!transport) {
-        return res.status(404).json({ error: 'Session not found' });
+        return res.status(404).json({ error: 'Transport not found' });
       }
 
       try {
