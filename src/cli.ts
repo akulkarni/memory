@@ -100,7 +100,8 @@ program
       // Check if all migrations have already been applied
       const migrations = [
         { id: '001_initial_schema', file: '001_initial_schema.sql', fallback: '001_simple_schema.sql' },
-        { id: '002_fix_triggers', file: '002_fix_triggers.sql' }
+        { id: '002_fix_triggers', file: '002_fix_triggers.sql' },
+        { id: '003_add_auth_support', file: '003_add_auth_support.sql' }
       ];
       
       let allApplied = true;
