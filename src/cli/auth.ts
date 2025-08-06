@@ -71,6 +71,16 @@ export class AuthManager {
     }
   }
 
+  public setApiKey(apiKey: string, username?: string, email?: string): void {
+    const config: AuthConfig = {
+      apiKey,
+      username: username || 'manual-setup',
+      email,
+      loginUrl: 'https://tigermemory.onrender.com'
+    };
+    this.saveConfig(config);
+  }
+
   public async login(options: { local?: boolean; baseUrl?: string } = {}): Promise<void> {
     const baseUrl = options.local 
       ? 'http://localhost:3000' 

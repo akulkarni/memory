@@ -53,10 +53,9 @@ export function createAuthRoutes(db: TigerCloudDB): Router {
       const callbackPort = req.query['callback_port'] as string;
       
       if (callbackPort && !isNaN(parseInt(callbackPort))) {
-        // CLI callback: Generate API key and redirect to local CLI callback
+        // CLI callback: Generate API key and show on success page
         const apiKey = await oauth.generateApiKey(user, 'CLI Login');
-        const callbackUrl = `http://localhost:${callbackPort}/callback?apiKey=${apiKey.key_hash}&username=${user.username}&email=${user.email || ''}`;
-        res.redirect(callbackUrl);
+        res.redirect(`${baseUrl}/auth/success?mode=cli&username=${user.username}&apiKey=${apiKey.key_hash}&callback_port=${callbackPort}`);
       } else if (isLocalMode) {
         // Local mode: Set JWT cookie and redirect to success page
         const jwt = oauth.generateJWT(user);
@@ -79,7 +78,7 @@ export function createAuthRoutes(db: TigerCloudDB): Router {
 
   // Success page
   router.get('/success', (req: Request, res: Response) => {
-    const { mode, username, apiKey } = req.query;
+    const { mode, username, apiKey, callback_port } = req.query;
     
     let html = `
       <!DOCTYPE html>
@@ -98,7 +97,42 @@ export function createAuthRoutes(db: TigerCloudDB): Router {
         <div class="success">✅ Successfully logged in as @${username}!</div>
     `;
 
-    if (mode === 'local') {
+    if (mode === 'cli') {
+      html += `
+        <p>Your CLI authentication is complete!</p>
+        <div class="code">
+          <strong>API Key:</strong><br>
+          <code id="apiKey">${apiKey}</code>
+          <button class="copy-btn" onclick="copyApiKey()">Copy</button>
+        </div>
+        <div class="warning">
+          <strong>⚠️ Important:</strong> Copy this API key - your CLI is waiting for it.
+        </div>
+        <p><strong>Return to your terminal and the login should complete automatically.</strong></p>
+        <p>If it doesn't work automatically, you can manually save this key using:</p>
+        <div class="code">tigermemory auth set-key ${apiKey}</div>
+        
+        <script>
+          // Try to send the API key to the local CLI callback
+          const callbackPort = '${callback_port}';
+          if (callbackPort) {
+            const callbackUrl = 'http://localhost:' + callbackPort + '/callback';
+            const params = new URLSearchParams({
+              apiKey: '${apiKey}',
+              username: '${username}',
+              email: '${req.query['email'] || ''}'
+            });
+            
+            // Use an image request to avoid CORS issues
+            const img = new Image();
+            img.onerror = img.onload = () => {
+              console.log('Callback attempt made');
+            };
+            img.src = callbackUrl + '?' + params.toString();
+          }
+        </script>
+      `;
+    } else if (mode === 'local') {
       html += `
         <p>You're now authenticated for local development.</p>
         <p><strong>You can close this window and return to your terminal.</strong></p>

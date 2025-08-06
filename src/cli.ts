@@ -497,6 +497,32 @@ program
     }
   });
 
+program
+  .command('auth')
+  .description('Authentication management commands')
+  .addCommand(
+    new Command('set-key')
+      .description('Manually set Tiger Memory API key')
+      .argument('<apiKey>', 'API key to set')
+      .action(async (apiKey: string) => {
+        try {
+          if (!apiKey.startsWith('tm_')) {
+            console.error('❌ Invalid API key format. API keys should start with "tm_"');
+            process.exit(1);
+          }
+          
+          // Save the API key using AuthManager
+          auth.setApiKey(apiKey);
+          console.log('✅ API key saved successfully');
+          console.log('🔑 You can now use Tiger Memory CLI commands');
+          
+        } catch (error) {
+          console.error('❌ Failed to save API key:', error instanceof Error ? error.message : 'Unknown error');
+          process.exit(1);
+        }
+      })
+  );
+
 // MCP client test command
 program
   .command('test-connection')
