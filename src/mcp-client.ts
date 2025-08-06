@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+// EventSource polyfill for Node.js (must be set up before importing MCP SDK)
+if (typeof global !== 'undefined' && !(global as any).EventSource) {
+  const { EventSource } = require('eventsource');
+  (global as any).EventSource = EventSource;
+}
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -42,10 +48,10 @@ export class TigerMemoryMCPClient {
         throw new Error('API key required for remote connection. Run `tigermemory login` first.');
       }
 
-      // Remote connection using SSE transport
-      this.transport = new SSEClientTransport(
-        new URL('/mcp/sse', serverUrl)
-      );
+      // Remote connection using SSE transport with API key in URL
+      const sseUrl = new URL('/mcp/sse', serverUrl);
+      sseUrl.searchParams.set('api_key', apiKey);
+      this.transport = new SSEClientTransport(sseUrl);
     } else {
       // Local connection using stdio transport
       this.transport = new StdioClientTransport({

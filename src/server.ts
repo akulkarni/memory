@@ -466,23 +466,43 @@ export class TigerMemoryRemoteServer {
     // Auth middleware for API routes
     this.app.use('/api', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
     
+    // Auth middleware for MCP routes
+    this.app.use('/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
+    
     // Auth routes
     this.app.use('/auth', this.auth.routes);
     
     // MCP SSE endpoint
-    this.app.get('/mcp/sse', async (_req: express.Request, res: express.Response) => {
+    this.app.get('/mcp/sse', async (req: express.Request, res: express.Response) => {
+      // Extract user from auth middleware (should be available from earlier middleware)
+      const user = (req as any).user;
+      
+      if (!user) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      
+      logger.info('Starting MCP SSE connection', { userId: user.id, username: user.username });
+      
       const transport = new SSEServerTransport('/mcp/message', res);
       this.transports.set(transport.sessionId, transport);
       
       transport.onclose = () => {
         this.transports.delete(transport.sessionId);
+        logger.info('MCP SSE connection closed', { sessionId: transport.sessionId });
       };
 
       await this.server.connect(transport);
     });
     
-    // MCP message endpoint
+    // MCP message endpoint  
     this.app.post('/mcp/message', async (req: express.Request, res: express.Response) => {
+      // Auth middleware should have already run
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
       const sessionId = req.query['sessionId'] as string;
       const transport = this.transports.get(sessionId);
       
