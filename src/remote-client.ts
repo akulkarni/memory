@@ -18,6 +18,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { createLogger } from 'winston';
 import * as dotenv from 'dotenv';
+import { AuthManager } from './cli/auth.js';
 
 dotenv.config();
 
@@ -36,9 +37,11 @@ export class TigerMemoryRemoteClient {
   private server: Server;
   private client: Client;
   private remoteUrl: string;
+  private auth: AuthManager;
 
   constructor() {
     this.remoteUrl = process.env['TIGER_REMOTE_URL'] || 'https://tigermemory.onrender.com';
+    this.auth = new AuthManager();
     
     this.server = new Server(
       {
@@ -116,8 +119,15 @@ export class TigerMemoryRemoteClient {
         transport: health.transport
       });
 
-      // Connect to remote server using SSE transport
-      const sseTransport = new SSEClientTransport(new URL(`${this.remoteUrl}/mcp/sse`));
+      // Connect to remote server using SSE transport with authentication
+      const apiKey = this.auth.getApiKey();
+      if (!apiKey) {
+        throw new Error('No API key found. Please run `tigermemory login` first.');
+      }
+
+      const sseUrl = new URL(`${this.remoteUrl}/mcp/sse`);
+      sseUrl.searchParams.set('api_key', apiKey);
+      const sseTransport = new SSEClientTransport(sseUrl);
       await this.client.connect(sseTransport);
       
       logger.info('Connected to remote server via SSE');
