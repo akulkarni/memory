@@ -447,7 +447,10 @@ export class TigerMemoryRemoteServer {
   }
 
   private setupExpress(): void {
-    // Middleware
+    // Raw body for MCP message endpoint MUST come before express.json()
+    this.app.use('/mcp/message', express.raw({ type: 'application/json' }));
+    
+    // General middleware (after MCP-specific middleware)
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
     this.app.use(cookieParser());
