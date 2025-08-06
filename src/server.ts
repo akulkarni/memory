@@ -447,11 +447,16 @@ export class TigerMemoryRemoteServer {
   }
 
   private setupExpress(): void {
-    // Raw body for MCP message endpoint MUST come before express.json()
-    this.app.use('/mcp/message', express.raw({ type: 'application/json' }));
+    // IMPORTANT: NO body parsing middleware for /mcp/message - SSEServerTransport handles raw body itself
     
-    // General middleware (after MCP-specific middleware)
-    this.app.use(express.json());
+    // General middleware (but NOT for /mcp/message)
+    this.app.use((req, res, next) => {
+      if (req.path === '/mcp/message') {
+        // Skip body parsing for MCP message endpoint
+        return next();
+      }
+      express.json()(req, res, next);
+    });
     this.app.use(express.urlencoded({ extended: true }));
     this.app.use(cookieParser());
     
