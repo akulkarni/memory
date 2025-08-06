@@ -52,7 +52,7 @@ export class ToolHandler {
         throw new Error(`Type must be one of: ${validTypes.join(', ')}`);
       }
 
-      logger.info('Generating embedding for decision', { decision: decision.substring(0, 50) });
+      logger.info('Generating embedding for decision', { decision: decision.substring(0, 50), userId, projectId, sessionId });
       const embedding = await this.intelligence.generateDecisionEmbedding(decision, reasoning, type);
 
       const decisionRecord: Decision = {
@@ -69,8 +69,19 @@ export class ToolHandler {
         vector_embedding: embedding
       };
 
+      logger.info('Decision record before save', { 
+        id: decisionRecord.id, 
+        user_id: decisionRecord.user_id,
+        project_id: decisionRecord.project_id,
+        session_id: decisionRecord.session_id 
+      });
+
       const savedDecision = await this.database.saveDecision(decisionRecord);
-      logger.info('Decision saved successfully', { id: savedDecision.id });
+      logger.info('Decision saved successfully', { 
+        id: savedDecision.id, 
+        saved_user_id: savedDecision.user_id,
+        saved_project_id: savedDecision.project_id 
+      });
 
       await this.database.updateSessionDecisionCount(
         sessionId,
