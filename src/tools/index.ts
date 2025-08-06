@@ -122,6 +122,12 @@ export class ToolHandler {
         decisions = await this.database.getProjectDecisions(projectId, limit);
       }
 
+      // Debug: Log user_id values from database
+      logger.info('Retrieved decisions from database', { 
+        decisionCount: decisions.length,
+        userIds: decisions.map(d => ({ id: d.id, user_id: d.user_id }))
+      });
+
       if (decisions.length === 0) {
         return {
           content: [{
@@ -150,6 +156,10 @@ export class ToolHandler {
         }
         
         contextText += `**Confidence**: ${Math.round(decision.confidence * 100)}%\n`;
+        
+        if (decision.user_id) {
+          contextText += `**User**: ${decision.user_id}\n`;
+        }
         
         if (decision.created_at) {
           contextText += `**Date**: ${decision.created_at.toISOString().split('T')[0]}\n`;
