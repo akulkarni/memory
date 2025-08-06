@@ -17,7 +17,7 @@ export class AuthMiddleware {
       let user: AuthenticatedUser | null = null;
 
       // Try Authorization header first (API key or Bearer token)
-      const authHeader = req.headers.authorization;
+      const authHeader = req.headers['authorization'];
       if (authHeader) {
         if (authHeader.startsWith('Bearer ')) {
           // JWT token

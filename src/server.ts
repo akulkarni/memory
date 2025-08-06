@@ -464,13 +464,13 @@ export class TigerMemoryRemoteServer {
     });
     
     // Auth middleware for API routes
-    this.app.use('/api', (req: any, res: any, next: any) => this.auth.middleware.extractUser(req, res, next));
+    this.app.use('/api', (req: express.Request, res: express.Response, next: express.NextFunction) => this.auth.middleware.extractUser(req as any, res, next));
     
     // Auth routes
     this.app.use('/auth', this.auth.routes);
     
     // MCP SSE endpoint
-    this.app.get('/mcp/sse', async (_req, res) => {
+    this.app.get('/mcp/sse', async (_req: express.Request, res: express.Response) => {
       const transport = new SSEServerTransport('/mcp/message', res);
       this.transports.set(transport.sessionId, transport);
       
@@ -482,7 +482,7 @@ export class TigerMemoryRemoteServer {
     });
     
     // MCP message endpoint
-    this.app.post('/mcp/message', async (req, res) => {
+    this.app.post('/mcp/message', async (req: express.Request, res: express.Response) => {
       const sessionId = req.query['sessionId'] as string;
       const transport = this.transports.get(sessionId);
       
@@ -503,7 +503,7 @@ export class TigerMemoryRemoteServer {
     });
     
     // Health check
-    this.app.get('/', (_req, res) => {
+    this.app.get('/', (_req: express.Request, res: express.Response) => {
       res.json({
         service: 'Tiger Memory Remote MCP Server',
         version: '1.0.0',
