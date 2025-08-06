@@ -179,7 +179,8 @@ export class TigerMemoryServer {
             return await this.toolHandler.handleRememberDecision(
               args,
               this.currentProjectId!,
-              this.currentSessionId!
+              this.currentSessionId!,
+              undefined // Local server doesn't have user authentication yet
             );
 
           case 'recall_context':
@@ -292,6 +293,7 @@ export class TigerMemoryRemoteServer {
   private httpServer: any;
   private transports: Map<string, SSEServerTransport> = new Map();
   private sessions: Map<string, { userId: string; username: string }> = new Map();
+  private currentUserId: string | undefined;
 
   constructor() {
     this.port = parseInt(process.env['PORT'] || '10000');
@@ -338,7 +340,13 @@ export class TigerMemoryRemoteServer {
       }
 
       try {
+        // Set current user context for tool handlers
+        this.currentUserId = session.userId;
+        
         await transport.handlePostMessage(req, res);
+        
+        // Clear user context after handling
+        this.currentUserId = undefined;
       } catch (error) {
         logger.error('Error handling MCP message', error);
         if (!res.headersSent) {
@@ -456,7 +464,7 @@ export class TigerMemoryRemoteServer {
 
         switch (name) {
           case 'remember_decision':
-            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!);
+            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!, this.currentUserId);
           case 'recall_context':
             return await this.toolHandler.handleRecallContext(args, project.id!);
           case 'discover_patterns':

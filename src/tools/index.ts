@@ -25,7 +25,8 @@ export class ToolHandler {
   async handleRememberDecision(
     args: any,
     projectId: string,
-    sessionId: string
+    sessionId: string,
+    userId?: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       const {
@@ -57,6 +58,7 @@ export class ToolHandler {
       const decisionRecord: Decision = {
         project_id: projectId,
         session_id: sessionId,
+        ...(userId && { user_id: userId }),
         decision,
         reasoning,
         type,
