@@ -60,10 +60,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tigermemory/tigermemory.git"
+    "url": "https://github.com/akulkarni/memory.git"
   },
   "bugs": {
-    "url": "https://github.com/tigermemory/tigermemory/issues"
+    "url": "https://github.com/akulkarni/memory/issues"
   },
-  "homepage": "https://github.com/tigermemory/tigermemory#readme"
+  "homepage": "https://github.com/akulkarni/memory#readme"
 }
