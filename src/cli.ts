@@ -431,7 +431,7 @@ program
         console.log('\n🔗 Registering Tiger Memory with Claude Code...');
         try {
           const { spawn } = require('child_process');
-          const claude = spawn('claude', ['mcp', 'add', '--scope', 'user', 'tigermemory', 'npx', 'tigermemory', 'server'], {
+          const claude = spawn('claude', ['mcp', 'add', '--scope', 'user', 'tigermemory', 'npx', 'tigermemory', 'remote-client'], {
             stdio: 'pipe'
           });
           
@@ -450,7 +450,7 @@ program
           });
         } catch (registrationError) {
           console.log('⚠️  Automatic registration failed, but you can register manually:');
-          console.log('   claude mcp add --scope user tigermemory npx tigermemory server');
+          console.log('   claude mcp add --scope user tigermemory npx tigermemory remote-client');
         }
       }
 

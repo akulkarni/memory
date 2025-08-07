@@ -189,7 +189,7 @@ tigermemory server
 Tiger Memory registers globally with Claude Code, so no per-project configuration is needed. The registration is equivalent to running:
 
 ```bash
-claude mcp add --scope user tigermemory npx tigermemory server
+claude mcp add --scope user tigermemory npx tigermemory remote-client
 ```
 
 This makes Tiger Memory available in **all Claude Code sessions** automatically.
