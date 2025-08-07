@@ -101,7 +101,8 @@ program
       const migrations = [
         { id: '001_initial_schema', file: '001_initial_schema.sql', fallback: '001_simple_schema.sql' },
         { id: '002_fix_triggers', file: '002_fix_triggers.sql' },
-        { id: '003_add_auth_support', file: '003_add_auth_support.sql' }
+        { id: '003_add_auth_support', file: '003_add_auth_support.sql' },
+        { id: '004_git_based_projects', file: '004_git_based_projects.sql' }
       ];
       
       let allApplied = true;
