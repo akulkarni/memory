@@ -149,6 +149,34 @@
             border-radius: 6px;
             border: 1px solid #333;
             margin: 1rem 0;
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: #333;
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #444;
+            border-color: #f5ff80;
+            color: #f5ff80;
+        }
+        
+        .copy-btn.copied {
+            background: #27ca3f;
+            color: #000;
+            border-color: #27ca3f;
         }
         
         .continue-prompt {
@@ -369,7 +397,12 @@ Claude: "I'll add auth to your Express + PostgreSQL app..."
             </div>
 
             <div class="step" id="step4">
-                <div><span class="prompt">$</span> <span class="cmd">npm install -g tigermemory && tigermemory login</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <span class="prompt">$</span> <span class="cmd">npm install -g tigermemory && tigermemory login</span>
+                    </div>
+                    <button class="copy-btn" onclick="copyCommands(event)" style="margin-left: 0.5rem; font-size: 10px; padding: 0.2rem 0.4rem; flex-shrink: 0;">Copy</button>
+                </div>
                 <div class="out">
                     <div class="install-box">
                         <span class="highlight">Ready to try Tiger Memory?</span><br><br>
@@ -435,6 +468,41 @@ Claude: "I'll add auth to your Express + PostgreSQL app..."
         function skipToInstall() {
             currentStep = maxSteps;
             showStep(currentStep);
+        }
+
+        function copyCommands(event) {
+            event.stopPropagation(); // Prevent advancing the tutorial
+            
+            const commands = 'npm install -g tigermemory\ntigermemory login';
+            navigator.clipboard.writeText(commands).then(() => {
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = commands;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            });
         }
 
         function advance() {
