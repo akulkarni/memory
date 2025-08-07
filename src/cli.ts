@@ -189,122 +189,11 @@ program
       await database.disconnect();
       console.log('🎉 Tiger Memory database is ready!\n');
       console.log('Next steps:');
-      console.log('1. Run "tigermemory init" in your project directory');
-      console.log('2. Start using Tiger Memory with Claude Code');
+      console.log('1. Run "tigermemory login" to authenticate and register with Claude Code');
+      console.log('2. Start using Tiger Memory in any project directory');
       
     } catch (error) {
       console.error('❌ Migration failed:', error);
-      process.exit(1);
-    }
-  });
-
-program
-  .command('init')
-  .description('Initialize Tiger Memory for the current project')
-  .option('-f, --force', 'Force initialization even if already configured')
-  .action(async (options) => {
-    try {
-      console.log('🐅 Initializing Tiger Memory...\n');
-
-      const projectInfo = await ProjectDetector.detectProject();
-      if (!projectInfo) {
-        console.error('❌ No project detected. Please run this command in a project directory.');
-        console.log('   Supported project types: package.json, pyproject.toml, Cargo.toml, go.mod, etc.');
-        process.exit(1);
-      }
-
-      console.log(`📁 Project detected: ${projectInfo.name}`);
-      console.log(`🏠 Root path: ${projectInfo.rootPath}`);
-      console.log(`🛠️  Tech stack: ${projectInfo.techStack.join(', ')}`);
-      console.log(`📊 Project type: ${projectInfo.projectType}`);
-      console.log(`🔑 Project ID: ${projectInfo.pathHash}\n`);
-
-      if (!process.env['TIGER_CLOUD_CONNECTION_STRING']) {
-        console.error('❌ TIGER_CLOUD_CONNECTION_STRING environment variable not set');
-        console.log('\n   Please add the following to your environment:');
-        console.log('   export TIGER_CLOUD_CONNECTION_STRING="postgresql://..."');
-        console.log('\n   Or create a .env file in your project root with:');
-        console.log('   TIGER_CLOUD_CONNECTION_STRING=postgresql://...');
-        process.exit(1);
-      }
-
-      if (!process.env['ANTHROPIC_API_KEY']) {
-        console.error('❌ ANTHROPIC_API_KEY environment variable not set');
-        console.log('\n   Please add the following to your environment:');
-        console.log('   export ANTHROPIC_API_KEY="sk-..."');
-        console.log('\n   Or add it to your .env file:');
-        console.log('   ANTHROPIC_API_KEY=sk-...');
-        process.exit(1);
-      }
-
-      const database = new TigerCloudDB();
-      console.log('🔗 Connecting to Tiger Cloud...');
-      
-      try {
-        await database.connect();
-        console.log('✅ Connected to Tiger Cloud successfully\n');
-      } catch (error) {
-        console.error('❌ Failed to connect to Tiger Cloud:', error);
-        process.exit(1);
-      }
-
-      let project = await database.getProject(projectInfo.pathHash);
-      
-      if (project && !options.force) {
-        console.log('✅ Project already registered in Tiger Memory');
-        console.log(`   Created: ${project.created_at?.toISOString().split('T')[0]}`);
-      } else {
-        if (options.force && project) {
-          console.log('🔄 Force flag specified, updating project information...');
-        }
-        
-        project = await database.createProject({
-          name: projectInfo.name,
-          path_hash: projectInfo.pathHash,
-          tech_stack: projectInfo.techStack,
-          project_type: projectInfo.projectType
-        });
-        
-        console.log('✅ Project registered in Tiger Memory');
-      }
-
-      const mcpConfigPath = path.join(projectInfo.rootPath, '.claude_mcp_config.json');
-      const mcpConfig = {
-        mcpServers: {
-          tigermemory: {
-            command: 'npx',
-            args: ['tigermemory', 'server'],
-            env: {
-              TIGER_CLOUD_CONNECTION_STRING: process.env['TIGER_CLOUD_CONNECTION_STRING'],
-              ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY']
-            }
-          }
-        }
-      };
-
-      if (!fs.existsSync(mcpConfigPath) || options.force) {
-        fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-        console.log('📄 MCP configuration created: .claude_mcp_config.json');
-      } else {
-        console.log('📄 MCP configuration already exists (use --force to overwrite)');
-      }
-
-      await database.disconnect();
-
-      console.log('\n🎉 Tiger Memory initialization complete!\n');
-      console.log('Next steps:');
-      console.log('1. Restart Claude Code to load the new MCP server');
-      console.log('2. Start coding - Tiger Memory will automatically capture decisions');
-      console.log('3. Ask Claude to "recall our project context" to see stored decisions\n');
-      
-      console.log('Available commands in Claude Code:');
-      console.log('• remember_decision - Store architectural decisions');
-      console.log('• recall_context - Retrieve project context');
-      console.log('• discover_patterns - Find architectural patterns');
-      console.log('• get_timeline - View decision timeline');
-      
-    } catch (error) {
-      console.error('❌ Initialization failed:', error);
       process.exit(1);
     }
   });
@@ -345,92 +234,59 @@ program
 
 program
   .command('status')
-  .description('Check Tiger Memory status for the current project')
+  .description('Check Tiger Memory status and configuration')
   .action(async () => {
     try {
       console.log('🐅 Tiger Memory Status\n');
 
-      const projectInfo = await ProjectDetector.detectProject();
-      if (!projectInfo) {
-        console.log('❌ No project detected in current directory');
+      // Check authentication
+      if (!auth.isLoggedIn()) {
+        console.log('❌ Authentication: Not logged in');
+        console.log('💡 Run: tigermemory login\n');
         return;
       }
 
-      console.log(`📁 Project: ${projectInfo.name}`);
-      console.log(`🔑 Project ID: ${projectInfo.pathHash}`);
-      console.log(`🛠️  Tech Stack: ${projectInfo.techStack.join(', ')}`);
-      console.log(`📊 Type: ${projectInfo.projectType}\n`);
+      const user = auth.getUser();
+      console.log(`✅ Authentication: Logged in as ${user?.username || user?.email || 'unknown'}\n`);
 
-      if (!process.env['TIGER_CLOUD_CONNECTION_STRING']) {
-        console.log('❌ TIGER_CLOUD_CONNECTION_STRING not configured');
-        return;
-      }
-
-      const database = new TigerCloudDB();
-      
+      // Check Claude Code MCP registration
       try {
-        await database.connect();
-        console.log('✅ Tiger Cloud connection: OK');
+        const { spawn } = require('child_process');
+        const claude = spawn('claude', ['mcp', 'list'], { stdio: 'pipe' });
         
-        const project = await database.getProject(projectInfo.pathHash);
-        if (project) {
-          console.log(`✅ Project registered: ${project.created_at?.toISOString().split('T')[0]}`);
-          
-          const decisions = await database.getProjectDecisions(project.id!, 1);
-          console.log(`📊 Total decisions stored: ${decisions.length > 0 ? 'Available' : 'None yet'}`);
+        let output = '';
+        claude.stdout.on('data', (data: any) => {
+          output += data.toString();
+        });
+
+        await new Promise((resolve) => {
+          claude.on('close', () => resolve(void 0));
+        });
+
+        if (output.includes('tigermemory')) {
+          console.log('✅ Claude Code integration: Registered globally');
         } else {
-          console.log('❌ Project not registered (run: tigermemory init)');
+          console.log('❌ Claude Code integration: Not registered');
+          console.log('💡 Run: tigermemory login (to automatically register)');
         }
-        
-        await database.disconnect();
       } catch (error) {
-        console.log('❌ Tiger Cloud connection: FAILED');
-        console.log(`   Error: ${error}`);
+        console.log('⚠️  Claude Code integration: Unable to check (Claude Code may not be installed)');
       }
 
-      const mcpConfigPath = path.join(projectInfo.rootPath, '.claude_mcp_config.json');
-      if (fs.existsSync(mcpConfigPath)) {
-        console.log('✅ MCP configuration: OK');
+      // Show current directory context (optional)
+      const projectInfo = await ProjectDetector.detectProject();
+      if (projectInfo) {
+        console.log(`\n📁 Current project: ${projectInfo.name}`);
+        console.log(`🛠️  Tech stack: ${projectInfo.techStack.join(', ')}`);
+        console.log(`📊 Project type: ${projectInfo.projectType}`);
       } else {
-        console.log('❌ MCP configuration: Missing (run: tigermemory init)');
+        console.log('\n📂 Current directory: Not a recognized project (that\'s ok!)');
       }
+
+      console.log('\n✨ Tiger Memory is ready to capture architectural decisions!');
 
     } catch (error) {
       console.error('❌ Status check failed:', error);
-    }
-  });
-
-program
-  .command('reset')
-  .description('Reset Tiger Memory configuration for the current project')
-  .option('--confirm', 'Confirm the reset operation')
-  .action(async (options) => {
-    if (!options.confirm) {
-      console.log('⚠️  This will remove the local MCP configuration.');
-      console.log('   Project data in Tiger Cloud will remain intact.');
-      console.log('   Run with --confirm to proceed.');
-      return;
-    }
-
-    try {
-      const projectInfo = await ProjectDetector.detectProject();
-      if (!projectInfo) {
-        console.log('❌ No project detected in current directory');
-        return;
-      }
-
-      const mcpConfigPath = path.join(projectInfo.rootPath, '.claude_mcp_config.json');
-      if (fs.existsSync(mcpConfigPath)) {
-        fs.unlinkSync(mcpConfigPath);
-        console.log('✅ MCP configuration removed');
-      } else {
-        console.log('ℹ️  No MCP configuration found');
-      }
-
-      console.log('\n🔄 Reset complete. Run "tigermemory init" to reconfigure.');
-      
-    } catch (error) {
-      console.error('❌ Reset failed:', error);
     }
   });
 
@@ -439,15 +295,48 @@ const auth = new AuthManager();
 
 program
   .command('login')
-  .description('Login to Tiger Memory with GitHub OAuth')
+  .description('Login to Tiger Memory and register with Claude Code')
   .option('--local', 'Login to local development server')
   .option('--url <url>', 'Custom server URL')
+  .option('--no-register', 'Skip automatic registration with Claude Code')
   .action(async (options) => {
     try {
+      // Step 1: Authenticate
       await auth.login({ 
         local: options.local, 
         baseUrl: options.url 
       });
+
+      // Step 2: Register with Claude Code (unless --no-register)
+      if (options.register !== false) {
+        console.log('\n🔗 Registering Tiger Memory with Claude Code...');
+        try {
+          const { spawn } = require('child_process');
+          const claude = spawn('claude', ['mcp', 'add', '--scope', 'user', 'tigermemory', 'npx', 'tigermemory', 'server'], {
+            stdio: 'pipe'
+          });
+          
+          await new Promise((resolve, reject) => {
+            claude.on('close', (code: any) => {
+              if (code === 0) {
+                console.log('✅ Tiger Memory registered globally with Claude Code');
+                console.log('🎉 Tiger Memory is now available in ALL Claude Code sessions');
+                resolve(void 0);
+              } else {
+                reject(new Error(`Claude MCP registration failed with code ${code}`));
+              }
+            });
+            
+            claude.on('error', reject);
+          });
+        } catch (registrationError) {
+          console.log('⚠️  Automatic registration failed, but you can register manually:');
+          console.log('   claude mcp add --scope user tigermemory npx tigermemory server');
+        }
+      }
+
+      console.log('\n🎉 Setup complete! Tiger Memory is ready to use.');
+      console.log('💡 Open Claude Code in any directory - Tiger Memory will be automatically available.');
     } catch (error) {
       console.error('❌ Login failed:', error instanceof Error ? error.message : 'Unknown error');
       process.exit(1);

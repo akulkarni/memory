@@ -28,25 +28,13 @@ npm install -g tigermemory
 
 ### Setup
 
-1. **Navigate to your project directory:**
-   ```bash
-   cd /your/project
-   ```
-
-2. **Authenticate with GitHub:**
+1. **Authenticate and register:**
    ```bash
    tigermemory login
    ```
-   This opens your browser for GitHub OAuth authentication.
+   This opens your browser for GitHub OAuth authentication and automatically registers Tiger Memory with Claude Code globally.
 
-3. **Initialize Tiger Memory:**
-   ```bash
-   tigermemory init
-   ```
-
-4. **Restart Claude Code** to load the new MCP server
-
-That's it! Tiger Memory will now automatically capture and recall your project decisions.
+That's it! Tiger Memory now works in **any directory** and will automatically capture and recall your project decisions.
 
 ## 🎯 The Magic Moment
 
@@ -161,25 +149,16 @@ Tiger Memory uses a cloud-native remote MCP architecture:
 ## 📖 CLI Commands
 
 ### `tigermemory login`
-Authenticate with GitHub to access Tiger Memory.
+Authenticate with GitHub and register Tiger Memory globally with Claude Code.
 
 ```bash
-tigermemory login           # Login to hosted service
-tigermemory login --local   # Login to local development instance
-```
-
-### `tigermemory init`
-Initialize Tiger Memory for the current project.
-
-```bash
-tigermemory init [options]
-
-Options:
-  -f, --force    Force initialization even if already configured
+tigermemory login               # Login to hosted service and auto-register
+tigermemory login --local       # Login to local development instance
+tigermemory login --no-register # Skip automatic Claude Code registration
 ```
 
 ### `tigermemory status`
-Check Tiger Memory status for the current project.
+Check Tiger Memory authentication and configuration status.
 
 ```bash
 tigermemory status
@@ -192,12 +171,6 @@ Start the MCP server (used internally by Claude Code).
 tigermemory server
 ```
 
-### `tigermemory reset`
-Reset Tiger Memory configuration.
-
-```bash
-tigermemory reset --confirm
-```
 
 ## ⚙️ Configuration
 
@@ -213,21 +186,13 @@ tigermemory reset --confirm
 
 ### MCP Configuration
 
-Tiger Memory automatically creates `.claude_mcp_config.json` for remote MCP connection:
+Tiger Memory registers globally with Claude Code, so no per-project configuration is needed. The registration is equivalent to running:
 
-```json
-{
-  "mcpServers": {
-    "tigermemory": {
-      "command": "npx",
-      "args": ["tigermemory", "server"],
-      "env": {}
-    }
-  }
-}
+```bash
+claude mcp add --scope user tigermemory npx tigermemory server
 ```
 
-The remote server connection is established automatically using your authenticated session.
+This makes Tiger Memory available in **all Claude Code sessions** automatically.
 
 ## 🔒 Privacy & Security
 
