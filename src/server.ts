@@ -449,11 +449,12 @@ export class TigerMemoryRemoteServer {
         // Get userId directly from transport (set during SSE connection)
         const userId = (transport as any)?.userId;
 
-        logger.info('Tool request received', {
+        logger.info('Tool request received - FIXED VERSION', {
           toolName: name,
           sessionId: transport?.sessionId,
           userId: userId,
-          transportUserId: (transport as any)?.userId
+          transportUserId: (transport as any)?.userId,
+          version: 'transport-fix-v2'
         });
 
         // Use a default project/session for remote server
