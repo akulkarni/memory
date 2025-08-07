@@ -1,6 +1,6 @@
 {
   "name": "tigermemory",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Persistent memory system for Claude Code that provides architectural intelligence",
   "main": "dist/server.js",
   "bin": {
