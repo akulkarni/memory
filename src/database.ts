@@ -31,6 +31,8 @@ export interface Project {
   id?: string;
   name: string;
   path_hash: string;
+  git_remote_url?: string;
+  repository_id?: string;
   tech_stack: string[];
   project_type: string;
   created_at?: Date;
@@ -150,11 +152,18 @@ export class TigerCloudDB {
 
   async createProject(project: Project): Promise<Project> {
     const query = `
-      INSERT INTO projects (name, path_hash, tech_stack, project_type, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO projects (name, path_hash, git_remote_url, repository_id, tech_stack, project_type, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING *
     `;
-    const values = [project.name, project.path_hash, project.tech_stack, project.project_type];
+    const values = [
+      project.name, 
+      project.path_hash, 
+      project.git_remote_url || null,
+      project.repository_id || null,
+      project.tech_stack, 
+      project.project_type
+    ];
     const result = await this.query<Project>(query, values);
     return result.rows[0]!;
   }
@@ -163,6 +172,77 @@ export class TigerCloudDB {
     const query = 'SELECT * FROM projects WHERE path_hash = $1';
     const result = await this.query<Project>(query, [pathHash]);
     return result.rows[0] || null;
+  }
+
+  async getProjectByRepositoryId(repositoryId: string): Promise<Project | null> {
+    const query = 'SELECT * FROM projects WHERE repository_id = $1';
+    const result = await this.query<Project>(query, [repositoryId]);
+    return result.rows[0] || null;
+  }
+
+  async getOrCreateProject(projectInfo: {
+    name: string;
+    pathHash: string;
+    repositoryId?: string;
+    gitRemoteUrl?: string;
+    techStack: string[];
+    projectType: string;
+  }): Promise<Project> {
+    // First try to find by repository_id if available
+    if (projectInfo.repositoryId) {
+      const existingProject = await this.getProjectByRepositoryId(projectInfo.repositoryId);
+      if (existingProject) {
+        logger.debug('Found existing project by repository_id', { 
+          repositoryId: projectInfo.repositoryId, 
+          projectId: existingProject.id 
+        });
+        return existingProject;
+      }
+    }
+
+    // Fall back to path_hash lookup
+    const existingProject = await this.getProject(projectInfo.pathHash);
+    if (existingProject) {
+      // If we have new Git info but the project doesn't, update it
+      if (projectInfo.repositoryId && !existingProject.repository_id) {
+        logger.info('Updating existing project with Git info', { 
+          projectId: existingProject.id,
+          repositoryId: projectInfo.repositoryId 
+        });
+        await this.updateProjectGitInfo(existingProject.id!, projectInfo.repositoryId, projectInfo.gitRemoteUrl);
+        existingProject.repository_id = projectInfo.repositoryId;
+        if (projectInfo.gitRemoteUrl) {
+          existingProject.git_remote_url = projectInfo.gitRemoteUrl;
+        }
+      }
+      return existingProject;
+    }
+
+    // Create new project
+    const newProject: Project = {
+      name: projectInfo.name,
+      path_hash: projectInfo.pathHash,
+      ...(projectInfo.repositoryId && { repository_id: projectInfo.repositoryId }),
+      ...(projectInfo.gitRemoteUrl && { git_remote_url: projectInfo.gitRemoteUrl }),
+      tech_stack: projectInfo.techStack,
+      project_type: projectInfo.projectType
+    };
+
+    logger.info('Creating new project', { 
+      name: newProject.name,
+      repositoryId: newProject.repository_id,
+      pathHash: newProject.path_hash 
+    });
+    return await this.createProject(newProject);
+  }
+
+  private async updateProjectGitInfo(projectId: string, repositoryId: string, gitRemoteUrl?: string): Promise<void> {
+    const query = `
+      UPDATE projects 
+      SET repository_id = $1, git_remote_url = $2, updated_at = NOW()
+      WHERE id = $3
+    `;
+    await this.query(query, [repositoryId, gitRemoteUrl || null, projectId]);
   }
 
   async createSession(projectId: string, userId?: string): Promise<Session> {

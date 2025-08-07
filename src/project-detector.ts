@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
+import { execSync } from 'child_process';
 import { createLogger } from 'winston';
 
 const logger = createLogger({
@@ -18,6 +19,8 @@ export interface ProjectInfo {
   name: string;
   rootPath: string;
   pathHash: string;
+  gitRemoteUrl?: string;
+  repositoryId?: string;
   techStack: string[];
   projectType: string;
 }
@@ -50,6 +53,7 @@ export class ProjectDetector {
 
       const name = this.extractProjectName(rootPath);
       const pathHash = this.generatePathHash(rootPath);
+      const gitInfo = this.extractGitInfo(rootPath);
       const techStack = await this.analyzeTechStack(rootPath);
       const projectType = this.determineProjectType(techStack, rootPath);
 
@@ -57,6 +61,8 @@ export class ProjectDetector {
         name,
         rootPath,
         pathHash,
+        ...(gitInfo.remoteUrl && { gitRemoteUrl: gitInfo.remoteUrl }),
+        ...(gitInfo.repositoryId && { repositoryId: gitInfo.repositoryId }),
         techStack,
         projectType
       };
@@ -146,6 +152,64 @@ export class ProjectDetector {
   static generatePathHash(projectPath: string): string {
     const normalizedPath = path.resolve(projectPath);
     return createHash('sha256').update(normalizedPath).digest('hex').substring(0, 16);
+  }
+
+  private static extractGitInfo(rootPath: string): { remoteUrl?: string; repositoryId?: string } {
+    try {
+      // Check if this is a Git repository
+      const gitDir = path.join(rootPath, '.git');
+      if (!fs.existsSync(gitDir)) {
+        return {};
+      }
+
+      // Get the remote origin URL
+      const remoteUrl = execSync('git config --get remote.origin.url', {
+        cwd: rootPath,
+        encoding: 'utf8',
+        timeout: 5000 // 5 second timeout
+      }).trim();
+
+      if (!remoteUrl) {
+        return {};
+      }
+
+      const repositoryId = this.normalizeGitUrl(remoteUrl);
+      
+      logger.debug('Git info extracted', { rootPath, remoteUrl, repositoryId });
+      return { remoteUrl, repositoryId };
+    } catch (error) {
+      // Git command failed or not a Git repository
+      logger.debug('Failed to extract Git info', { rootPath, error: (error as Error).message });
+      return {};
+    }
+  }
+
+  private static normalizeGitUrl(gitUrl: string): string {
+    // Remove common prefixes and suffixes to get a normalized repository identifier
+    let normalized = gitUrl.trim();
+    
+    // Handle SSH format: git@github.com:user/repo.git -> github.com/user/repo
+    if (normalized.startsWith('git@')) {
+      normalized = normalized.replace(/^git@/, '');
+      normalized = normalized.replace(':', '/');
+    }
+    
+    // Handle HTTPS format: https://github.com/user/repo.git -> github.com/user/repo
+    if (normalized.startsWith('https://') || normalized.startsWith('http://')) {
+      normalized = normalized.replace(/^https?:\/\//, '');
+    }
+    
+    // Remove .git suffix
+    if (normalized.endsWith('.git')) {
+      normalized = normalized.slice(0, -4);
+    }
+    
+    // Remove trailing slash
+    if (normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
+    }
+    
+    return normalized.toLowerCase();
   }
 
   private static async analyzeTechStack(rootPath: string): Promise<string[]> {

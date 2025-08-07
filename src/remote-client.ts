@@ -41,7 +41,14 @@ export class TigerMemoryRemoteClient {
   private client: Client;
   private remoteUrl: string;
   private auth: AuthManager;
-  private projectContext?: { name: string; pathHash: string; techStack: string[]; projectType: string };
+  private projectContext?: { 
+    name: string; 
+    pathHash: string; 
+    repositoryId?: string;
+    gitRemoteUrl?: string;
+    techStack: string[]; 
+    projectType: string 
+  };
 
   constructor() {
     this.remoteUrl = process.env['TIGER_REMOTE_URL'] || 'https://tigermemory.onrender.com';
@@ -83,6 +90,8 @@ export class TigerMemoryRemoteClient {
         this.projectContext = {
           name: projectInfo.name,
           pathHash: projectInfo.pathHash,
+          ...(projectInfo.repositoryId && { repositoryId: projectInfo.repositoryId }),
+          ...(projectInfo.gitRemoteUrl && { gitRemoteUrl: projectInfo.gitRemoteUrl }),
           techStack: projectInfo.techStack,
           projectType: projectInfo.projectType
         };

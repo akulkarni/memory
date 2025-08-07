@@ -233,16 +233,14 @@ export class TigerMemoryServer {
         );
       }
 
-      let project = await this.database.getProject(projectInfo.pathHash);
-      if (!project) {
-        project = await this.database.createProject({
-          name: projectInfo.name,
-          path_hash: projectInfo.pathHash,
-          tech_stack: projectInfo.techStack,
-          project_type: projectInfo.projectType
-        });
-        logger.info('Created new project', { project });
-      }
+      const project = await this.database.getOrCreateProject({
+        name: projectInfo.name,
+        pathHash: projectInfo.pathHash,
+        ...(projectInfo.repositoryId && { repositoryId: projectInfo.repositoryId }),
+        ...(projectInfo.gitRemoteUrl && { gitRemoteUrl: projectInfo.gitRemoteUrl }),
+        techStack: projectInfo.techStack,
+        projectType: projectInfo.projectType
+      });
 
       const session = await this.database.createSession(project.id!);
       
@@ -473,6 +471,8 @@ export class TigerMemoryRemoteServer {
           projectInfo = {
             name: projectContext.name || 'unknown-project',
             pathHash: projectContext.pathHash,
+            repositoryId: projectContext.repositoryId,
+            gitRemoteUrl: projectContext.gitRemoteUrl,
             techStack: projectContext.techStack || ['unknown'],
             projectType: projectContext.projectType || 'general'
           };
@@ -482,20 +482,21 @@ export class TigerMemoryRemoteServer {
           projectInfo = { 
             name: 'remote-fallback', 
             pathHash: `fallback-${userId}-${Date.now()}`,
+            repositoryId: undefined,
+            gitRemoteUrl: undefined,
             techStack: ['unknown'],
             projectType: 'general'
           };
         }
         
-        let project = await this.database.getProject(projectInfo.pathHash);
-        if (!project) {
-          project = await this.database.createProject({
-            name: projectInfo.name,
-            path_hash: projectInfo.pathHash,
-            tech_stack: projectInfo.techStack,
-            project_type: projectInfo.projectType
-          });
-        }
+        const project = await this.database.getOrCreateProject({
+          name: projectInfo.name,
+          pathHash: projectInfo.pathHash,
+          ...(projectInfo.repositoryId && { repositoryId: projectInfo.repositoryId }),
+          ...(projectInfo.gitRemoteUrl && { gitRemoteUrl: projectInfo.gitRemoteUrl }),
+          techStack: projectInfo.techStack,
+          projectType: projectInfo.projectType
+        });
 
         const session = await this.database.createSession(project.id!);
 
