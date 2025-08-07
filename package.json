@@ -1,6 +1,6 @@
 {
   "name": "tigermemory",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Persistent memory system for Claude Code that provides architectural intelligence",
   "main": "dist/server.js",
   "bin": {
@@ -24,7 +24,7 @@
   ],
   "author": "Tiger Memory Team",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
+    "@anthropic-ai/sdk": "^0.58.0",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "@types/cookie-parser": "^1.4.9",
     "@types/eventsource": "^1.1.15",
