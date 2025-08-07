@@ -40,7 +40,7 @@ export class TigerMemoryMCPClient {
     this.auth = new AuthManager();
     this.isRemote = !options.useLocal;
 
-    const serverUrl = options.serverUrl || process.env['TIGERMEMORY_SERVER_URL'] || 'https://tigermemory.onrender.com';
+    const serverUrl = options.serverUrl || process.env['TIGERMEMORY_SERVER_URL'] || 'https://tigermemory.dev';
     const apiKey = options.apiKey || this.auth.getApiKey();
 
     if (this.isRemote) {

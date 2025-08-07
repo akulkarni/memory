@@ -216,7 +216,7 @@ program
 program
   .command('remote-client')
   .description('Start the Tiger Memory remote client (connects to remote MCP server)')
-  .option('-u, --url <url>', 'Remote server URL', 'https://tigermemory.onrender.com')
+  .option('-u, --url <url>', 'Remote server URL', 'https://tigermemory.dev')
   .action(async (options) => {
     if (!auth.isLoggedIn()) {
       console.error('❌ Not logged in. Run `tigermemory login` first.');
@@ -236,7 +236,7 @@ program
 program
   .command('init')
   .description('Initialize Tiger Memory in current project directory')
-  .option('--url <url>', 'Custom server URL', 'https://tigermemory.onrender.com')
+  .option('--url <url>', 'Custom server URL', 'https://tigermemory.dev')
   .action(async (options) => {
     try {
       const mcpConfigPath = path.join(process.cwd(), '.mcp.json');
@@ -255,7 +255,7 @@ program
       if (fs.existsSync(templatePath)) {
         // Use template and customize URL if provided
         const template = JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
-        if (options.url !== 'https://tigermemory.onrender.com') {
+        if (options.url !== 'https://tigermemory.dev') {
           template.mcpServers.tigermemory.env.TIGER_REMOTE_URL = options.url;
         }
         mcpConfig = template;
@@ -400,7 +400,7 @@ program
           if (fs.existsSync(templatePath)) {
             // Use template and customize URL if provided
             const template = JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
-            if (options.url && options.url !== 'https://tigermemory.onrender.com') {
+            if (options.url && options.url !== 'https://tigermemory.dev') {
               template.mcpServers.tigermemory.env.TIGER_REMOTE_URL = options.url;
             }
             mcpConfig = template;
@@ -412,7 +412,7 @@ program
                   command: "npx",
                   args: ["tigermemory", "remote-client"],
                   env: {
-                    TIGER_REMOTE_URL: options.url || 'https://tigermemory.onrender.com'
+                    TIGER_REMOTE_URL: options.url || 'https://tigermemory.dev'
                   }
                 }
               }
