@@ -233,6 +233,70 @@ program
   });
 
 program
+  .command('init')
+  .description('Initialize Tiger Memory in current project directory')
+  .option('--url <url>', 'Custom server URL', 'https://tigermemory.onrender.com')
+  .action(async (options) => {
+    try {
+      const mcpConfigPath = path.join(process.cwd(), '.mcp.json');
+      
+      // Check if .mcp.json already exists
+      if (fs.existsSync(mcpConfigPath)) {
+        console.log('⚠️  .mcp.json already exists in this directory');
+        console.log('   Delete it first if you want to reinitialize');
+        return;
+      }
+
+      // Create .mcp.json from template
+      const templatePath = path.join(__dirname, '../templates/mcp.json');
+      let mcpConfig;
+
+      if (fs.existsSync(templatePath)) {
+        // Use template and customize URL if provided
+        const template = JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
+        if (options.url !== 'https://tigermemory.onrender.com') {
+          template.mcpServers.tigermemory.env.TIGER_REMOTE_URL = options.url;
+        }
+        mcpConfig = template;
+      } else {
+        // Fallback to inline template
+        mcpConfig = {
+          mcpServers: {
+            tigermemory: {
+              command: "npx",
+              args: ["tigermemory", "remote-client"],
+              env: {
+                TIGER_REMOTE_URL: options.url
+              }
+            }
+          }
+        };
+      }
+
+      // Write .mcp.json
+      fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+
+      console.log('🐅 Tiger Memory initialized successfully!');
+      console.log(`📝 Created .mcp.json with server URL: ${options.url}`);
+      console.log('\nNext steps:');
+      console.log('1. Make sure you\'re logged in: tigermemory login');
+      console.log('2. Open Claude Code in this directory');
+      console.log('3. Tiger Memory will be automatically available');
+      
+      // Show current directory info
+      const projectInfo = await ProjectDetector.detectProject();
+      if (projectInfo) {
+        console.log(`\n📁 Detected project: ${projectInfo.name}`);
+        console.log(`🛠️  Tech stack: ${projectInfo.techStack.join(', ')}`);
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to initialize Tiger Memory:', error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program
   .command('status')
   .description('Check Tiger Memory status and configuration')
   .action(async () => {
@@ -248,6 +312,22 @@ program
 
       const user = auth.getUser();
       console.log(`✅ Authentication: Logged in as ${user?.username || user?.email || 'unknown'}\n`);
+
+      // Check for local .mcp.json
+      const mcpConfigPath = path.join(process.cwd(), '.mcp.json');
+      if (fs.existsSync(mcpConfigPath)) {
+        try {
+          const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+          const serverUrl = mcpConfig.mcpServers?.tigermemory?.env?.TIGER_REMOTE_URL;
+          console.log('✅ Local configuration: .mcp.json found');
+          console.log(`🌐 Remote server: ${serverUrl || 'default'}`);
+        } catch (error) {
+          console.log('⚠️  Local configuration: .mcp.json found but invalid');
+        }
+      } else {
+        console.log('❌ Local configuration: No .mcp.json found');
+        console.log('💡 Run: tigermemory init');
+      }
 
       // Check Claude Code MCP registration
       try {
@@ -307,7 +387,46 @@ program
         baseUrl: options.url 
       });
 
-      // Step 2: Register with Claude Code (unless --no-register)
+      // Step 2: Check for and create local .mcp.json if needed
+      const mcpConfigPath = path.join(process.cwd(), '.mcp.json');
+      if (!fs.existsSync(mcpConfigPath)) {
+        console.log('\n📝 No .mcp.json found, creating local configuration...');
+        
+        try {
+          const templatePath = path.join(__dirname, '../templates/mcp.json');
+          let mcpConfig;
+
+          if (fs.existsSync(templatePath)) {
+            // Use template and customize URL if provided
+            const template = JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
+            if (options.url && options.url !== 'https://tigermemory.onrender.com') {
+              template.mcpServers.tigermemory.env.TIGER_REMOTE_URL = options.url;
+            }
+            mcpConfig = template;
+          } else {
+            // Fallback to inline template
+            mcpConfig = {
+              mcpServers: {
+                tigermemory: {
+                  command: "npx",
+                  args: ["tigermemory", "remote-client"],
+                  env: {
+                    TIGER_REMOTE_URL: options.url || 'https://tigermemory.onrender.com'
+                  }
+                }
+              }
+            };
+          }
+
+          fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+          const serverUrl = mcpConfig.mcpServers.tigermemory.env.TIGER_REMOTE_URL;
+          console.log(`✅ Created .mcp.json with server: ${serverUrl}`);
+        } catch (initError) {
+          console.log('⚠️  Failed to create .mcp.json automatically. Run `tigermemory init` manually.');
+        }
+      }
+
+      // Step 3: Register with Claude Code (unless --no-register)
       if (options.register !== false) {
         console.log('\n🔗 Registering Tiger Memory with Claude Code...');
         try {
