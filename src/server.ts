@@ -600,7 +600,19 @@ export class TigerMemoryRemoteServer {
         logger.info('MCP SSE connection closed', { sessionId: transport.sessionId });
       };
 
-      await this.server.connect(transport);
+      try {
+        logger.info('Attempting to connect MCP server to SSE transport', { sessionId: transport.sessionId });
+        await this.server.connect(transport);
+        logger.info('MCP server connected to SSE transport successfully', { sessionId: transport.sessionId });
+      } catch (error) {
+        logger.error('Failed to connect MCP server to SSE transport', { 
+          sessionId: transport.sessionId, 
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        res.status(500).json({ error: 'Failed to establish MCP connection' });
+        return;
+      }
     });
     
     

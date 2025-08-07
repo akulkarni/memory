@@ -173,7 +173,7 @@ export class TigerMemoryRemoteClient {
   async start(): Promise<void> {
     try {
       // Test connection to remote server
-      const healthResponse = await fetch(`${this.remoteUrl}/`);
+      const healthResponse = await fetch(`${this.remoteUrl}/api/health`);
       if (!healthResponse.ok) {
         throw new Error(`Remote server not accessible: ${healthResponse.status}`);
       }
@@ -193,8 +193,17 @@ export class TigerMemoryRemoteClient {
 
       const sseUrl = new URL(`${this.remoteUrl}/mcp/sse`);
       sseUrl.searchParams.set('api_key', apiKey);
+      logger.info('Connecting to SSE endpoint', { url: sseUrl.toString().replace(apiKey, '***') });
+      
       const sseTransport = new SSEClientTransport(sseUrl);
-      await this.client.connect(sseTransport);
+      
+      // Add timeout to connection
+      const connectPromise = this.client.connect(sseTransport);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('SSE connection timeout after 10 seconds')), 10000)
+      );
+      
+      await Promise.race([connectPromise, timeoutPromise]);
       
       logger.info('Connected to remote server via SSE');
 
