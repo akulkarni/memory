@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import { createHash } from 'crypto';
 import { createLogger } from 'winston';
 
 const logger = createLogger({
@@ -145,7 +145,7 @@ export class ProjectDetector {
 
   static generatePathHash(projectPath: string): string {
     const normalizedPath = path.resolve(projectPath);
-    return crypto.createHash('sha256').update(normalizedPath).digest('hex').substring(0, 16);
+    return createHash('sha256').update(normalizedPath).digest('hex').substring(0, 16);
   }
 
   private static async analyzeTechStack(rootPath: string): Promise<string[]> {

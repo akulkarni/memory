@@ -1,6 +1,6 @@
 {
   "name": "tigermemory",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Persistent memory system for Claude Code that provides architectural intelligence",
   "main": "dist/server.js",
   "bin": {
@@ -33,13 +33,10 @@
     "@types/pg": "^8.10.0",
     "commander": "^11.0.0",
     "cookie-parser": "^1.4.6",
-    "crypto": "^1.0.1",
     "dotenv": "^16.3.0",
     "eventsource": "^4.0.0",
     "express": "^4.18.0",
-    "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.0",
-    "path": "^0.12.7",
     "pg": "^8.11.0",
     "pgvector": "^0.1.8",
     "winston": "^3.11.0"

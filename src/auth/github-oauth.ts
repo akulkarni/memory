@@ -1,5 +1,5 @@
 import * as jwt from 'jsonwebtoken';
-import crypto from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { GitHubUser, AuthenticatedUser, ApiKey } from './types';
 import { authConfig } from './config';
 import { TigerCloudDB } from '../database';
@@ -13,7 +13,7 @@ export class GitHubOAuth {
       client_id: authConfig.github.clientId,
       redirect_uri: authConfig.github.callbackUrl,
       scope: 'user:email',
-      state: state || crypto.randomBytes(16).toString('hex')
+      state: state || randomBytes(16).toString('hex')
     });
     
     return `https://github.com/login/oauth/authorize?${params.toString()}`;
@@ -143,8 +143,8 @@ export class GitHubOAuth {
   }
 
   async generateApiKey(user: AuthenticatedUser, name: string = 'Default'): Promise<ApiKey & { key_hash: string }> {
-    const key = authConfig.apiKey.prefix + crypto.randomBytes(32).toString('hex');
-    const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+    const key = authConfig.apiKey.prefix + randomBytes(32).toString('hex');
+    const keyHash = createHash('sha256').update(key).digest('hex');
     
     const apiKey = await this.db.createApiKey({
       user_id: user.id,
@@ -179,7 +179,7 @@ export class GitHubOAuth {
       return null;
     }
 
-    const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+    const keyHash = createHash('sha256').update(key).digest('hex');
     const apiKey = await this.db.getApiKeyByHash(keyHash);
     
     if (!apiKey) {
