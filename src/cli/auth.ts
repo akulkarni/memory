@@ -76,7 +76,7 @@ export class AuthManager {
       apiKey,
       username: username || 'manual-setup',
       email,
-      loginUrl: 'https://tigermemory.onrender.com'
+      loginUrl: 'https://tigermemory.dev'
     };
     this.saveConfig(config);
   }
@@ -84,7 +84,7 @@ export class AuthManager {
   public async login(options: { local?: boolean; baseUrl?: string } = {}): Promise<void> {
     const baseUrl = options.local 
       ? 'http://localhost:3000' 
-      : (options.baseUrl || 'https://tigermemory.onrender.com');
+      : (options.baseUrl || 'https://tigermemory.dev');
 
     console.log('🔐 Starting Tiger Memory authentication...');
     

@@ -51,7 +51,7 @@ export class TigerMemoryRemoteClient {
   };
 
   constructor() {
-    this.remoteUrl = process.env['TIGER_REMOTE_URL'] || 'https://tigermemory.onrender.com';
+    this.remoteUrl = process.env['TIGER_REMOTE_URL'] || 'https://tigermemory.dev';
     this.auth = new AuthManager();
     
     this.server = new Server(

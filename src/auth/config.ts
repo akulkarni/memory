@@ -39,4 +39,4 @@ const isLocalTesting = process.env['NODE_ENV'] !== 'production' &&
 
 export const baseUrl = isLocalTesting
   ? 'http://localhost:3000' 
-  : (process.env['BASE_URL'] || 'https://tigermemory.onrender.com');
+  : (process.env['BASE_URL'] || 'https://tigermemory.dev');
