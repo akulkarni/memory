@@ -20,6 +20,8 @@ import { createLogger } from 'winston';
 import * as dotenv from 'dotenv';
 import { AuthManager } from './cli/auth.js';
 import { ProjectDetector } from './project-detector.js';
+import { createHash } from 'crypto';
+import * as path from 'path';
 
 dotenv.config();
 
@@ -88,9 +90,9 @@ export class TigerMemoryRemoteClient {
       } else {
         // Fallback for directories without detectable project structure
         const cwd = process.cwd();
-        const pathHash = require('crypto').createHash('sha256').update(cwd).digest('hex').substring(0, 16);
+        const pathHash = createHash('sha256').update(cwd).digest('hex').substring(0, 16);
         this.projectContext = {
-          name: require('path').basename(cwd),
+          name: path.basename(cwd),
           pathHash,
           techStack: ['unknown'],
           projectType: 'general'
@@ -101,9 +103,9 @@ export class TigerMemoryRemoteClient {
       logger.error('Failed to detect project context', error);
       // Use ultimate fallback
       const cwd = process.cwd();
-      const pathHash = require('crypto').createHash('sha256').update(cwd).digest('hex').substring(0, 16);
+      const pathHash = createHash('sha256').update(cwd).digest('hex').substring(0, 16);
       this.projectContext = {
-        name: require('path').basename(cwd),
+        name: path.basename(cwd),
         pathHash,
         techStack: ['unknown'],
         projectType: 'general'
