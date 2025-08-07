@@ -14,7 +14,8 @@ Tiger Memory is a persistent memory system for Claude Code that provides archite
 - **🏛️ Architectural Intelligence** - Discover patterns from similar projects in the community
 - **📊 Project Timeline** - Track architectural evolution over time
 - **⚡ Zero Manual Work** - Fully automatic integration with Claude Code via MCP
-- **🌐 Cloud-Native** - Direct connection to Tiger Cloud PostgreSQL database
+- **🌐 Cloud-Native** - Remote MCP server with SSE transport for seamless Claude Code integration
+- **👥 Multi-User Support** - GitHub OAuth authentication with team collaboration
 - **🔒 Privacy-First** - You control what decisions are shared publicly
 
 ## 🚀 Quick Start
@@ -32,23 +33,18 @@ npm install -g tigermemory
    cd /your/project
    ```
 
-2. **Set environment variables:**
+2. **Authenticate with GitHub:**
    ```bash
-   export TIGER_CLOUD_CONNECTION_STRING="postgresql://..."
-   export ANTHROPIC_API_KEY="sk-ant-..."
+   tigermemory login
    ```
+   This opens your browser for GitHub OAuth authentication.
 
-3. **Set up the database:**
-   ```bash
-   tigermemory migrate
-   ```
-
-4. **Initialize Tiger Memory:**
+3. **Initialize Tiger Memory:**
    ```bash
    tigermemory init
    ```
 
-5. **Restart Claude Code** to load the new MCP server
+4. **Restart Claude Code** to load the new MCP server
 
 That's it! Tiger Memory will now automatically capture and recall your project decisions.
 
@@ -67,7 +63,7 @@ Claude: "I'd be happy to help, but I don't have context about your task app.
 You: "Continue with our task app"
 Claude: "I can see we're building a Node.js task management app with Express, 
          PostgreSQL, and JWT authentication. Based on our previous decisions, 
-         you wanted to use Prisma for the ORM and implement user roles. 
+         you wanted to implement user roles with a clean database abstraction layer. 
          Should we continue with the task CRUD endpoints we discussed?"
 ```
 
@@ -146,28 +142,30 @@ Tiger Memory automatically detects projects using:
 
 ## 🗄️ Architecture
 
-Tiger Memory uses a cloud-native architecture:
+Tiger Memory uses a cloud-native remote MCP architecture:
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Claude Code   │───▶│  Tiger Memory    │───▶│  Tiger Cloud    │
-│                 │    │  MCP Server      │    │  PostgreSQL     │
-│  - remember     │    │                  │    │  + TimescaleDB  │
-│  - recall       │    │  - Project       │    │  + pgvector     │
-│  - discover     │    │    Detection     │    │                 │
-│  - timeline     │    │  - Vector        │    │  - Projects     │
-│                 │    │    Embeddings    │    │  - Decisions    │
-│                 │    │  - Intelligence  │    │  - Patterns     │
+│                 │    │  Remote MCP      │    │  PostgreSQL     │
+│  - remember     │    │  Server (SSE)    │    │  + TimescaleDB  │
+│  - recall       │    │                  │    │  + pgvector     │
+│  - discover     │    │  - GitHub OAuth  │    │                 │
+│  - timeline     │    │  - User Context  │    │  - Users        │
+│                 │    │  - Vector        │    │  - Teams        │
+│                 │    │    Embeddings    │    │  - Projects     │
+│                 │    │  - Intelligence  │    │  - Decisions    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
 ## 📖 CLI Commands
 
-### `tigermemory migrate`
-Set up the database schema for Tiger Memory.
+### `tigermemory login`
+Authenticate with GitHub to access Tiger Memory.
 
 ```bash
-tigermemory migrate
+tigermemory login           # Login to hosted service
+tigermemory login --local   # Login to local development instance
 ```
 
 ### `tigermemory init`
@@ -207,14 +205,15 @@ tigermemory reset --confirm
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TIGER_CLOUD_CONNECTION_STRING` | Yes | PostgreSQL connection string for Tiger Cloud |
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for vector embeddings |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for vector embeddings (development only) |
 | `LOG_LEVEL` | No | Logging level (`debug`, `info`, `warn`, `error`) |
 | `NODE_ENV` | No | Environment (`development`, `production`) |
 
+> **Note**: For the hosted service, authentication is handled via GitHub OAuth. Environment variables are only needed for local development.
+
 ### MCP Configuration
 
-Tiger Memory automatically creates `.claude_mcp_config.json`:
+Tiger Memory automatically creates `.claude_mcp_config.json` for remote MCP connection:
 
 ```json
 {
@@ -222,22 +221,22 @@ Tiger Memory automatically creates `.claude_mcp_config.json`:
     "tigermemory": {
       "command": "npx",
       "args": ["tigermemory", "server"],
-      "env": {
-        "TIGER_CLOUD_CONNECTION_STRING": "postgresql://...",
-        "ANTHROPIC_API_KEY": "sk-ant-..."
-      }
+      "env": {}
     }
   }
 }
 ```
 
+The remote server connection is established automatically using your authenticated session.
+
 ## 🔒 Privacy & Security
 
+- **GitHub OAuth Authentication**: Secure authentication via GitHub with proper scope handling
 - **You control sharing**: Decisions marked `public: false` stay private to your project
-- **No credentials stored**: Environment variables handle sensitive data
-- **Secure connections**: All database connections use SSL/TLS
-- **Data isolation**: Each project gets a unique hash-based identifier
-- **Audit trail**: Complete timeline of all decisions and changes
+- **Secure API keys**: Authentication tokens stored locally and transmitted securely
+- **Secure connections**: All connections use HTTPS/WSS with proper encryption
+- **Data isolation**: User-based access control with team collaboration support
+- **Audit trail**: Complete timeline of all decisions with user attribution
 
 ## 🤝 Contributing
 
@@ -277,7 +276,9 @@ npm run build
 
 ## 🗺️ Roadmap
 
-- [ ] **Team Collaboration** - Share project memories across team members
+- [x] **Multi-User Support** - GitHub OAuth authentication with user attribution
+- [x] **Remote MCP Server** - Cloud-native SSE transport for seamless integration
+- [ ] **Team Collaboration** - Enhanced team features and project sharing
 - [ ] **Pattern Marketplace** - Community-driven architectural pattern sharing
 - [ ] **IDE Extensions** - Direct integration with VS Code, IntelliJ, etc.
 - [ ] **Advanced Analytics** - Decision success tracking and recommendations
