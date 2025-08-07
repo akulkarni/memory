@@ -293,6 +293,7 @@ export class TigerMemoryRemoteServer {
   private httpServer: any;
   private transports: Map<string, SSEServerTransport> = new Map();
   private sessions: Map<string, { userId: string; username: string }> = new Map();
+  private currentUserId: string | undefined;
 
   constructor() {
     this.port = parseInt(process.env['PORT'] || '10000');
@@ -339,13 +340,20 @@ export class TigerMemoryRemoteServer {
       }
 
       try {
+        // Set current user context for this session/transport
+        this.currentUserId = session.userId;
+        
         logger.info('MCP message processing', { 
           sessionId, 
           userId: session.userId, 
-          username: session.username
+          username: session.username,
+          currentUserId: this.currentUserId
         });
         
         await transport.handlePostMessage(req, res);
+        
+        // Clear user context after handling
+        this.currentUserId = undefined;
       } catch (error) {
         logger.error('Error handling MCP message', error);
         if (!res.headersSent) {
@@ -440,21 +448,20 @@ export class TigerMemoryRemoteServer {
       };
     });
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request, { transport }: any) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
       try {
         await this.ensureProjectContext();
 
-        // Get userId directly from transport (set during SSE connection)
-        const userId = (transport as any)?.userId;
+        // Use currentUserId set during message processing
+        const userId = this.currentUserId;
 
-        logger.info('Tool request received - FIXED VERSION', {
+        logger.info('Tool request received - CURRENT USER VERSION', {
           toolName: name,
-          sessionId: transport?.sessionId,
           userId: userId,
-          transportUserId: (transport as any)?.userId,
-          version: 'transport-fix-v2'
+          currentUserId: this.currentUserId,
+          version: 'current-user-fix-v3'
         });
 
         // Use a default project/session for remote server
@@ -557,9 +564,6 @@ export class TigerMemoryRemoteServer {
         userId: user.id,
         username: user.username
       });
-
-      // Store userId directly on transport for easier access
-      (transport as any).userId = user.id;
       
       transport.onclose = () => {
         this.transports.delete(transport.sessionId);
