@@ -7,7 +7,7 @@
     "tigermemory": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/migrations && cp src/migrations/*.sql dist/migrations/",
+    "build": "tsc && mkdir -p dist/migrations && cp src/migrations/*.sql dist/migrations/ && cp -r www dist/",
     "dev": "ts-node src/server.ts",
     "start": "node dist/server.js",
     "lint": "eslint src/**/*.ts",

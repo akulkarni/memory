@@ -17,6 +17,7 @@ import { createLogger } from 'winston';
 import * as dotenv from 'dotenv';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import path from 'path';
 
 dotenv.config();
 
@@ -569,6 +570,9 @@ export class TigerMemoryRemoteServer {
     // Auth routes
     this.app.use('/auth', this.auth.routes);
     
+    // Static file serving for landing page
+    this.app.use(express.static(path.join(process.cwd(), 'www')));
+    
     // MCP SSE endpoint
     this.app.get('/mcp/sse', async (req: express.Request, res: express.Response) => {
       // Extract user from auth middleware (should be available from earlier middleware)
@@ -600,8 +604,8 @@ export class TigerMemoryRemoteServer {
     });
     
     
-    // Health check
-    this.app.get('/', (_req: express.Request, res: express.Response) => {
+    // API health check
+    this.app.get('/api/health', (_req: express.Request, res: express.Response) => {
       res.json({
         service: 'Tiger Memory Remote MCP Server',
         version: '1.0.0',
@@ -615,6 +619,8 @@ export class TigerMemoryRemoteServer {
         }
       });
     });
+    
+    // Root serves landing page (handled by static middleware above)
   }
 
   private setupHTTPServer(): void {

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiger Memory - Claude Code that Actually Remembers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font: 14px/1.6 ui-monospace, Monaco, Consolas, monospace;
+            background: #000;
+            color: #fff;
+            padding: 2rem;
+        }
+        
+        .terminal {
+            max-width: 750px;
+            margin: 0 auto;
+            background: #111;
+            border-radius: 8px;
+            border: 1px solid #333;
+            position: relative;
+        }
+        
+        .terminal-header {
+            background: #222;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .terminal-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .btn.close { background: #ff5f56; }
+        .btn.minimize { background: #ffbd2e; }
+        .btn.maximize { background: #27ca3f; }
+        
+        .terminal-title {
+            color: #888;
+            font-size: 13px;
+        }
+        
+        .content {
+            padding: 2rem;
+            min-height: 450px;
+            position: relative;
+        }
+        
+        .play-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #f5ff80;
+            color: #000;
+            border: none;
+            border-radius: 50px;
+            padding: 1rem 2rem;
+            font: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(245, 255, 128, 0.3);
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        .play-button:hover {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 6px 30px rgba(245, 255, 128, 0.4);
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1);
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+        
+        .progress {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .progress.show {
+            opacity: 1;
+        }
+        
+        .progress-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.3s ease;
+        }
+        
+        .progress-dot.active {
+            background: #f5ff80;
+        }
+        
+        .prompt {
+            color: #888;
+        }
+        
+        .cmd {
+            color: #f5ff80;
+        }
+        
+        .out {
+            color: #ccc;
+            margin: 1rem 0 2rem;
+        }
+        
+        .success {
+            color: #fff;
+        }
+        
+        .highlight {
+            color: #fff;
+        }
+        
+        .install-box {
+            background: #000;
+            padding: 1.5rem;
+            border-radius: 6px;
+            border: 1px solid #333;
+            margin: 1rem 0;
+        }
+        
+        .continue-prompt {
+            color: #888;
+            font-style: italic;
+            margin: 1rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .skip-btn {
+            background: none;
+            border: 1px solid #333;
+            color: #888;
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .skip-btn:hover {
+            border-color: #f5ff80;
+            color: #f5ff80;
+        }
+        
+        .step {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .step.active {
+            display: block;
+        }
+        
+        .footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: #888;
+            padding: 1rem 0;
+        }
+        
+        .footer a {
+            color: #ccc;
+            text-decoration: none;
+            margin: 0 1rem;
+            font-weight: 500;
+        }
+        
+        .footer a:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .cursor {
+            background: #fff;
+            animation: blink 1s infinite;
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        .mcp-call {
+            color: #58a6ff;
+        }
+        
+        .mcp-name {
+            font-weight: bold;
+        }
+        
+        .mcp-params {
+            color: #ccc;
+            margin-left: 2rem;
+        }
+        
+        .typing {
+            overflow: hidden;
+            white-space: nowrap;
+            width: 0;
+            animation: typewriter 2s steps(40) forwards;
+        }
+        
+        @keyframes typewriter {
+            to { width: 100%; }
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .content { padding: 1.5rem; }
+            .continue-prompt { flex-direction: column; gap: 1rem; }
+            .mcp-params { 
+                margin-left: 1rem; 
+                word-break: break-word;
+                white-space: pre-wrap;
+            }
+            pre {
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="terminal-buttons">
+                <div class="btn close"></div>
+                <div class="btn minimize"></div>
+                <div class="btn maximize"></div>
+            </div>
+            <div class="terminal-title">tigermemory.dev</div>
+        </div>
+        
+        <div class="content">
+            <div class="progress">
+                <div class="progress-dot"></div>
+                <div class="progress-dot"></div>
+                <div class="progress-dot"></div>
+                <div class="progress-dot"></div>
+            </div>
+
+            <div class="step active" id="step0">
+                <button class="play-button" onclick="startDemo()">▶ Start</button>
+            </div>
+
+            <div class="step" id="step1">
+                <div><span class="prompt">$</span> <span class="cmd">cat problem.md</span></div>
+                <div class="out">
+<pre># The Problem
+
+Every new Claude Code session starts from zero.
+
+You waste 5 minutes re-explaining:
+- Your tech stack (React, Express, PostgreSQL)  
+- Project structure (/src/components/, /api/auth/)
+- Architecture decisions and context
+
+EVERY TIME:
+You: "I have a React app with Express backend"
+You: "Using PostgreSQL, JWT auth, routes in /api/auth/"  
+You: "Components are in /src/components/"
+You: "Now help me add password reset..."
+Claude: "Thanks for the context! Let me help..."
+
+😤 5 minutes wasted every session.</pre>
+                </div>
+                <div class="continue-prompt">
+                    <span>Click anywhere to continue...</span>
+                    <button class="skip-btn" onclick="skipToInstall()">Skip to Install</button>
+                </div>
+            </div>
+
+            <div class="step" id="step2">
+                <div><span class="prompt">$</span> <span class="cmd">cat solution.md</span></div>
+                <div class="out">
+<pre># Tiger Memory
+
+Claude Code that actually remembers your project.
+
+SESSION 1:
+You: "Let's use Express with PostgreSQL"
+Claude: "I'll help you set up Express with PostgreSQL..."
+
+<span class="mcp-call">●</span> <span class="mcp-name">tigermemory - remember_decision (MCP)</span>
+<span class="mcp-params">(decision: "Express + PostgreSQL stack", 
+ files_affected: ["server.js", "db/config.js"])</span>
+
+SESSION 2:
+You: "Add user authentication"
+Claude: "I'll add auth to your Express + PostgreSQL app..."
+
+✨ Claude remembers without you explaining again.</pre>
+                </div>
+                <div class="continue-prompt">
+                    <span>Click anywhere to continue...</span>
+                    <button class="skip-btn" onclick="skipToInstall()">Get Started</button>
+                </div>
+            </div>
+
+            <div class="step" id="step3">
+                <div><span class="prompt">$</span> <span class="cmd">tigermemory --help</span></div>
+                <div class="out">
+<pre>Tiger Memory provides 4 MCP tools for Claude Code:
+
+<span class="highlight">remember_decision</span>
+  Automatically captures architecture choices
+  Example: "Express + PostgreSQL", "JWT auth"
+
+<span class="highlight">recall_context</span>
+  Loads your entire project state
+  Tech stack, file structure, previous decisions
+
+<span class="highlight">get_timeline</span>
+  See your project's evolution
+  Chronological history of all decisions
+
+<span class="highlight">discover_patterns</span>
+  Learn from similar projects
+  "67% use JWT, 23% use sessions for auth"
+
+✨ Claude uses these automatically. Zero manual work.</pre>
+                </div>
+                <div class="continue-prompt">
+                    <span>Click anywhere to continue...</span>
+                    <button class="skip-btn" onclick="skipToInstall()">Get Started</button>
+                </div>
+            </div>
+
+            <div class="step" id="step4">
+                <div><span class="prompt">$</span> <span class="cmd">npm install -g tigermemory && tigermemory login</span></div>
+                <div class="out">
+                    <div class="install-box">
+                        <span class="highlight">Ready to try Tiger Memory?</span><br><br>
+                        <span class="cmd">npm install -g tigermemory</span><br>
+                        <span class="cmd">tigermemory login</span><br><br>
+                        <span class="success">That's it. Claude Code now remembers everything.</span>
+                    </div>
+                </div>
+                <div class="continue-prompt">
+                    <span>Click anywhere to restart...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="https://github.com/akulkarni/memory">GitHub</a>
+        <a href="https://github.com/akulkarni/memory/blob/main/README.md">Docs</a>
+        <a href="https://github.com/akulkarni/memory/issues/new">Contact</a>
+    </div>
+
+    <script>
+        let currentStep = 0;
+        const maxSteps = 4;
+        let demoStarted = false;
+
+        function updateProgress() {
+            const dots = document.querySelectorAll('.progress-dot');
+            dots.forEach((dot, index) => {
+                // Only show progress for content screens (steps 1-4), not the start screen (step 0)
+                dot.classList.toggle('active', index === currentStep - 1);
+            });
+        }
+
+        function updateProgress() {
+            const progress = document.querySelector('.progress');
+            const dots = document.querySelectorAll('.progress-dot');
+            
+            if (currentStep === 0) {
+                progress.classList.remove('show');
+            } else {
+                progress.classList.add('show');
+                dots.forEach((dot, index) => {
+                    dot.classList.toggle('active', index === currentStep - 1);
+                });
+            }
+        }
+
+        function showStep(stepNumber) {
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            document.getElementById('step' + stepNumber).classList.add('active');
+            updateProgress();
+        }
+
+        function startDemo() {
+            demoStarted = true;
+            currentStep = 1;
+            showStep(currentStep);
+        }
+
+        function skipToInstall() {
+            currentStep = maxSteps;
+            showStep(currentStep);
+        }
+
+        function advance() {
+            if (!demoStarted) return;
+            
+            currentStep++;
+            if (currentStep > maxSteps) {
+                currentStep = 0;
+                demoStarted = false;
+            }
+            showStep(currentStep);
+        }
+
+        // Add event listeners
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('button')) return; // Don't advance on button clicks
+            advance();
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (!demoStarted) {
+                    startDemo();
+                } else {
+                    advance();
+                }
+            }
+        });
+
+        // Initialize
+        updateProgress();
+    </script>
+</body>
+</html>
