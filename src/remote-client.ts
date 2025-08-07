@@ -19,6 +19,7 @@ import {
 import { createLogger } from 'winston';
 import * as dotenv from 'dotenv';
 import { AuthManager } from './cli/auth.js';
+import { ProjectDetector } from './project-detector.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ export class TigerMemoryRemoteClient {
   private client: Client;
   private remoteUrl: string;
   private auth: AuthManager;
+  private projectContext?: { name: string; pathHash: string; techStack: string[]; projectType: string };
 
   constructor() {
     this.remoteUrl = process.env['TIGER_REMOTE_URL'] || 'https://tigermemory.onrender.com';
@@ -68,6 +70,47 @@ export class TigerMemoryRemoteClient {
     this.setupHandlers();
   }
 
+  private async ensureProjectContext(): Promise<void> {
+    if (this.projectContext) {
+      return;
+    }
+
+    try {
+      const projectInfo = await ProjectDetector.detectProject();
+      if (projectInfo) {
+        this.projectContext = {
+          name: projectInfo.name,
+          pathHash: projectInfo.pathHash,
+          techStack: projectInfo.techStack,
+          projectType: projectInfo.projectType
+        };
+        logger.info('Detected project context', this.projectContext);
+      } else {
+        // Fallback for directories without detectable project structure
+        const cwd = process.cwd();
+        const pathHash = require('crypto').createHash('sha256').update(cwd).digest('hex').substring(0, 16);
+        this.projectContext = {
+          name: require('path').basename(cwd),
+          pathHash,
+          techStack: ['unknown'],
+          projectType: 'general'
+        };
+        logger.info('Using fallback project context', this.projectContext);
+      }
+    } catch (error) {
+      logger.error('Failed to detect project context', error);
+      // Use ultimate fallback
+      const cwd = process.cwd();
+      const pathHash = require('crypto').createHash('sha256').update(cwd).digest('hex').substring(0, 16);
+      this.projectContext = {
+        name: require('path').basename(cwd),
+        pathHash,
+        techStack: ['unknown'],
+        projectType: 'general'
+      };
+    }
+  }
+
   private setupHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       try {
@@ -84,7 +127,19 @@ export class TigerMemoryRemoteClient {
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
-        const result = await this.client.callTool(request.params);
+        // Ensure we have project context before making tool calls
+        await this.ensureProjectContext();
+        
+        // Inject project context into tool arguments
+        const modifiedParams = {
+          ...request.params,
+          arguments: {
+            ...request.params.arguments,
+            _projectContext: this.projectContext
+          }
+        };
+        
+        const result = await this.client.callTool(modifiedParams);
         return result;
       } catch (error) {
         logger.error('Failed to call tool on remote server', { 

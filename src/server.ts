@@ -464,20 +464,44 @@ export class TigerMemoryRemoteServer {
           version: 'current-user-fix-v3'
         });
 
-        // Use a default project/session for remote server
-        // In production, you'd want better session management
-        const projectInfo = { name: 'remote-project', pathHash: 'remote-hash' };
+        // Extract project context from tool arguments (passed by remote client)
+        const projectContext = args?.['_projectContext'] as any;
+        let projectInfo;
+        
+        if (projectContext && projectContext.pathHash) {
+          // Use actual project context from client
+          projectInfo = {
+            name: projectContext.name || 'unknown-project',
+            pathHash: projectContext.pathHash,
+            techStack: projectContext.techStack || ['unknown'],
+            projectType: projectContext.projectType || 'general'
+          };
+        } else {
+          // Fallback for legacy clients or missing context
+          logger.warn('No project context provided, using fallback');
+          projectInfo = { 
+            name: 'remote-fallback', 
+            pathHash: `fallback-${userId}-${Date.now()}`,
+            techStack: ['unknown'],
+            projectType: 'general'
+          };
+        }
+        
         let project = await this.database.getProject(projectInfo.pathHash);
         if (!project) {
           project = await this.database.createProject({
             name: projectInfo.name,
             path_hash: projectInfo.pathHash,
-            tech_stack: ['remote'],
-            project_type: 'remote'
+            tech_stack: projectInfo.techStack,
+            project_type: projectInfo.projectType
           });
         }
 
         const session = await this.database.createSession(project.id!);
+
+        // Remove internal project context from arguments before passing to tools
+        const cleanArguments = { ...args };
+        delete cleanArguments['_projectContext'];
 
         switch (name) {
           case 'remember_decision':
@@ -487,13 +511,13 @@ export class TigerMemoryRemoteServer {
               sessionId: session.id,
               userId: userId 
             });
-            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!, userId);
+            return await this.toolHandler.handleRememberDecision(cleanArguments, project.id!, session.id!, userId);
           case 'recall_context':
-            return await this.toolHandler.handleRecallContext(args, project.id!);
+            return await this.toolHandler.handleRecallContext(cleanArguments, project.id!);
           case 'discover_patterns':
-            return await this.toolHandler.handleDiscoverPatterns(args);
+            return await this.toolHandler.handleDiscoverPatterns(cleanArguments);
           case 'get_timeline':
-            return await this.toolHandler.handleGetTimeline(args, project.id!);
+            return await this.toolHandler.handleGetTimeline(cleanArguments, project.id!);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
