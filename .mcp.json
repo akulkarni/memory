@@ -4,7 +4,7 @@
         "command": "npx",
         "args": ["tigermemory", "remote-client"],
         "env": {
-          "TIGER_REMOTE_URL": "https://tigermemory.onrender.com"
+          "TIGER_REMOTE_URL": "https://tigermemory.dev"
         }
     }
   }

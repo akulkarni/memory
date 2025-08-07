@@ -10,7 +10,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const serverUrl = 'https://tigermemory.onrender.com';
+const serverUrl = 'https://tigermemory.dev';
 const sseUrl = new URL('/mcp/sse', serverUrl);
 sseUrl.searchParams.set('api_key', apiKey);
 

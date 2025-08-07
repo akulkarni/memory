@@ -2,7 +2,7 @@
 
 // Test POST to message endpoint
 const sessionId = '655706b5-6266-4c59-9bf8-d41ff012b573'; // From SSE test
-const messageUrl = `https://tigermemory.onrender.com/mcp/message?sessionId=${sessionId}`;
+const messageUrl = `https://tigermemory.dev/mcp/message?sessionId=${sessionId}`;
 
 console.log('🔗 Testing POST to message endpoint...');
 console.log('URL:', messageUrl);

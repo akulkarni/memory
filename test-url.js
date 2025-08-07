@@ -8,7 +8,7 @@ const apiKey = auth.getApiKey();
 console.log('API Key:', apiKey ? `${apiKey.substring(0, 12)}...` : 'None');
 
 if (apiKey) {
-  const serverUrl = 'https://tigermemory.onrender.com';
+  const serverUrl = 'https://tigermemory.dev';
   const sseUrl = new URL('/mcp/sse', serverUrl);
   sseUrl.searchParams.set('api_key', apiKey);
   
