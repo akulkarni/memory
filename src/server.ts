@@ -293,7 +293,6 @@ export class TigerMemoryRemoteServer {
   private httpServer: any;
   private transports: Map<string, SSEServerTransport> = new Map();
   private sessions: Map<string, { userId: string; username: string }> = new Map();
-  private currentUserId: string | undefined;
 
   constructor() {
     this.port = parseInt(process.env['PORT'] || '10000');
@@ -340,19 +339,13 @@ export class TigerMemoryRemoteServer {
       }
 
       try {
-        // Set current user context for tool handlers
-        this.currentUserId = session.userId;
         logger.info('MCP message processing', { 
           sessionId, 
           userId: session.userId, 
-          username: session.username,
-          currentUserId: this.currentUserId 
+          username: session.username
         });
         
         await transport.handlePostMessage(req, res);
-        
-        // Clear user context after handling
-        this.currentUserId = undefined;
       } catch (error) {
         logger.error('Error handling MCP message', error);
         if (!res.headersSent) {
@@ -447,11 +440,21 @@ export class TigerMemoryRemoteServer {
       };
     });
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request, { transport }: any) => {
       const { name, arguments: args } = request.params;
 
       try {
         await this.ensureProjectContext();
+
+        // Get userId directly from transport (set during SSE connection)
+        const userId = (transport as any)?.userId;
+
+        logger.info('Tool request received', {
+          toolName: name,
+          sessionId: transport?.sessionId,
+          userId: userId,
+          transportUserId: (transport as any)?.userId
+        });
 
         // Use a default project/session for remote server
         // In production, you'd want better session management
@@ -474,9 +477,9 @@ export class TigerMemoryRemoteServer {
               toolName: name,
               projectId: project.id,
               sessionId: session.id,
-              currentUserId: this.currentUserId 
+              userId: userId 
             });
-            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!, this.currentUserId);
+            return await this.toolHandler.handleRememberDecision(args, project.id!, session.id!, userId);
           case 'recall_context':
             return await this.toolHandler.handleRecallContext(args, project.id!);
           case 'discover_patterns':
@@ -553,6 +556,9 @@ export class TigerMemoryRemoteServer {
         userId: user.id,
         username: user.username
       });
+
+      // Store userId directly on transport for easier access
+      (transport as any).userId = user.id;
       
       transport.onclose = () => {
         this.transports.delete(transport.sessionId);
